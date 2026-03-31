@@ -55,6 +55,7 @@ type openAIRequest struct {
 	Model       string           `json:"model"`
 	Messages    []Message        `json:"messages"`
 	Tools       []ToolDefinition `json:"tools,omitempty"`
+	ToolChoice  interface{}      `json:"tool_choice,omitempty"`
 	MaxTokens   int              `json:"max_tokens,omitempty"`
 	Temperature float64          `json:"temperature,omitempty"`
 	Stream      bool             `json:"stream"`
@@ -90,6 +91,7 @@ func (p *OpenAICompatibleProvider) Chat(ctx context.Context, messages []Message,
 		Model:       model,
 		Messages:    messages,
 		Tools:       tools,
+		ToolChoice:  "auto",
 		MaxTokens:   4096,
 		Temperature: 0.7,
 		Stream:      false,

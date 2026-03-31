@@ -78,13 +78,11 @@ type anthropicResponse struct {
 	Type    string `json:"type"`
 	Role    string `json:"role"`
 	Content []struct {
-		Type  string `json:"type"`
-		Text  string `json:"text,omitempty"`
-		ID    string `json:"id,omitempty"`
-		Name  string `json:"name,omitempty"`
-		Input struct {
-			Arguments string `json:"-"`
-		} `json:"input,omitempty"`
+		Type  string          `json:"type"`
+		Text  string          `json:"text,omitempty"`
+		ID    string          `json:"id,omitempty"`
+		Name  string          `json:"name,omitempty"`
+		Input json.RawMessage `json:"input,omitempty"`
 	} `json:"content"`
 	StopReason string `json:"stop_reason"`
 	Usage      struct {
@@ -206,12 +204,16 @@ func (p *AnthropicProvider) Chat(ctx context.Context, messages []Message, tools 
 		case "text":
 			result.Content = c.Text
 		case "tool_use":
+			args := "{}"
+			if len(c.Input) > 0 {
+				args = string(c.Input)
+			}
 			result.ToolCalls = append(result.ToolCalls, ToolCall{
 				ID:   c.ID,
 				Type: "function",
 				Function: FunctionCall{
 					Name:      c.Name,
-					Arguments: "{}",
+					Arguments: args,
 				},
 			})
 		}
