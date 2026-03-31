@@ -81,6 +81,10 @@ func RegisterBuiltinTools(registry *Registry) error {
 		return err
 	}
 
+	if err := RegisterWebSearchTool(registry); err != nil {
+		return err
+	}
+
 	return nil
 }
 
