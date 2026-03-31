@@ -14,6 +14,7 @@ import (
 	"github.com/nousresearch/hermes-go/cli"
 	"github.com/nousresearch/hermes-go/config"
 	"github.com/nousresearch/hermes-go/core"
+	"github.com/nousresearch/hermes-go/llm"
 	"github.com/nousresearch/hermes-go/memory"
 	"github.com/nousresearch/hermes-go/storage"
 	"github.com/nousresearch/hermes-go/tools"
@@ -102,14 +103,22 @@ func runChat(cfg *config.Config) {
 		}
 	}
 
-	apiKey := cfg.GetAPIKey(cfg.Provider)
-	if apiKey == "" {
-		log.Fatalf("No API key found for provider %q. Set the appropriate environment variable (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY).", cfg.Provider)
+	provider := cfg.Provider
+	if provider == "auto" {
+		provider, _ = llm.ParseModel(cfg.Model)
+	}
+
+	var apiKey string
+	if provider != "bedrock" {
+		apiKey = cfg.GetAPIKey(provider)
+		if apiKey == "" {
+			log.Fatalf("No API key found for provider %q. Set the appropriate environment variable (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY).", provider)
+		}
 	}
 
 	agent, err := core.NewAgent(core.AgentConfig{
 		Model:        cfg.Model,
-		Provider:     cfg.Provider,
+		Provider:     provider,
 		APIKey:       apiKey,
 		ToolRegistry: toolRegistry,
 		SessionDB:    sessionDB,
@@ -155,14 +164,22 @@ func runAPI(cfg *config.Config) {
 
 	sessionID := uuid.New().String()
 
-	apiKey := cfg.GetAPIKey(cfg.Provider)
-	if apiKey == "" {
-		log.Fatalf("No API key found for provider %q. Set the appropriate environment variable.", cfg.Provider)
+	provider := cfg.Provider
+	if provider == "auto" {
+		provider, _ = llm.ParseModel(cfg.Model)
+	}
+
+	var apiKey string
+	if provider != "bedrock" {
+		apiKey = cfg.GetAPIKey(provider)
+		if apiKey == "" {
+			log.Fatalf("No API key found for provider %q. Set the appropriate environment variable.", provider)
+		}
 	}
 
 	agent, err := core.NewAgent(core.AgentConfig{
 		Model:        cfg.Model,
-		Provider:     cfg.Provider,
+		Provider:     provider,
 		APIKey:       apiKey,
 		ToolRegistry: toolRegistry,
 		SessionDB:    sessionDB,
