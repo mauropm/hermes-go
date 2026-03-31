@@ -1,3 +1,6 @@
+//go:build cgo
+// +build cgo
+
 package storage
 
 import (
@@ -78,81 +81,83 @@ func (s *SessionDB) migrate() error {
 		return nil
 	}
 
-	migrations := map[int]string{
-		0: `
-			CREATE TABLE IF NOT EXISTS sessions (
-				id TEXT PRIMARY KEY,
-				source TEXT NOT NULL DEFAULT 'cli',
-				user_id TEXT,
-				model TEXT NOT NULL,
-				model_config TEXT,
-				system_prompt TEXT,
-				parent_session_id TEXT,
-				started_at REAL NOT NULL,
-				ended_at REAL,
-				end_reason TEXT,
-				message_count INTEGER NOT NULL DEFAULT 0,
-				tool_call_count INTEGER NOT NULL DEFAULT 0,
-				input_tokens INTEGER NOT NULL DEFAULT 0,
-				output_tokens INTEGER NOT NULL DEFAULT 0,
-				cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-				cache_write_tokens INTEGER NOT NULL DEFAULT 0,
-				reasoning_tokens INTEGER NOT NULL DEFAULT 0,
-				billing_provider TEXT,
-				billing_base_url TEXT,
-				billing_mode TEXT,
-				estimated_cost_usd REAL NOT NULL DEFAULT 0,
-				actual_cost_usd REAL NOT NULL DEFAULT 0,
-				cost_status TEXT,
-				cost_source TEXT,
-				pricing_version TEXT,
-				title TEXT,
-				FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
-			);
+	hasFTS5 := s.checkFTS5()
 
-			CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_title ON sessions(title) WHERE title IS NOT NULL;
-			CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
-			CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
+	baseMigration := `
+		CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			source TEXT NOT NULL DEFAULT 'cli',
+			user_id TEXT,
+			model TEXT NOT NULL,
+			model_config TEXT,
+			system_prompt TEXT,
+			parent_session_id TEXT,
+			started_at REAL NOT NULL,
+			ended_at REAL,
+			end_reason TEXT,
+			message_count INTEGER NOT NULL DEFAULT 0,
+			tool_call_count INTEGER NOT NULL DEFAULT 0,
+			input_tokens INTEGER NOT NULL DEFAULT 0,
+			output_tokens INTEGER NOT NULL DEFAULT 0,
+			cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+			cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+			reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+			billing_provider TEXT,
+			billing_base_url TEXT,
+			billing_mode TEXT,
+			estimated_cost_usd REAL NOT NULL DEFAULT 0,
+			actual_cost_usd REAL NOT NULL DEFAULT 0,
+			cost_status TEXT,
+			cost_source TEXT,
+			pricing_version TEXT,
+			title TEXT,
+			FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
+		);
 
-			CREATE TABLE IF NOT EXISTS messages (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				session_id TEXT NOT NULL,
-				role TEXT NOT NULL,
-				content TEXT,
-				tool_call_id TEXT,
-				tool_calls TEXT,
-				tool_name TEXT,
-				timestamp REAL NOT NULL,
-				token_count INTEGER,
-				finish_reason TEXT,
-				reasoning TEXT,
-				reasoning_details TEXT,
-				FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-			);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_title ON sessions(title) WHERE title IS NOT NULL;
+		CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
+		CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
 
-			CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-			CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role);
+		CREATE TABLE IF NOT EXISTS messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL,
+			role TEXT NOT NULL,
+			content TEXT,
+			tool_call_id TEXT,
+			tool_calls TEXT,
+			tool_name TEXT,
+			timestamp REAL NOT NULL,
+			token_count INTEGER,
+			finish_reason TEXT,
+			reasoning TEXT,
+			reasoning_details TEXT,
+			FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+		);
 
-			CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-				content,
-				content='messages',
-				content_rowid='id'
-			);
+		CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+		CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role);
+	`
 
-			CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
-				INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
-			END;
+	ftsMigration := `
+		CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+			content,
+			content='messages',
+			content_rowid='id'
+		);
 
-			CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
-				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.id, old.content);
-			END;
+		CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+			INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
+		END;
 
-			CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
-				INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.id, old.content);
-				INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
-			END;
-		`,
-	}
+		CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+			INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.id, old.content);
+		END;
+
+		CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+			INSERT INTO messages_fts(messages_fts, rowid, content) VALUES('delete', old.id, old.content);
+			INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
+		END;
+	`
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -161,12 +166,13 @@ func (s *SessionDB) migrate() error {
 	defer tx.Rollback()
 
 	for v := version; v < currentSchemaVersion; v++ {
-		migration, ok := migrations[v]
-		if !ok {
-			return fmt.Errorf("no migration from version %d", v)
+		if _, err := tx.Exec(baseMigration); err != nil {
+			return fmt.Errorf("execute migration v%d base: %w", v, err)
 		}
-		if _, err := tx.Exec(migration); err != nil {
-			return fmt.Errorf("execute migration v%d: %w", v, err)
+		if hasFTS5 {
+			if _, err := tx.Exec(ftsMigration); err != nil {
+				return fmt.Errorf("execute migration v%d fts5: %w", v, err)
+			}
 		}
 	}
 
@@ -179,6 +185,25 @@ func (s *SessionDB) migrate() error {
 	}
 
 	return nil
+}
+
+func (s *SessionDB) checkFTS5() bool {
+	rows, err := s.db.Query("PRAGMA compile_options")
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var opt string
+		if err := rows.Scan(&opt); err != nil {
+			continue
+		}
+		if opt == "ENABLE_FTS5" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *SessionDB) retry(fn func() error) error {
