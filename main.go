@@ -197,6 +197,10 @@ func runAPI(cfg *config.Config) {
 
 	srv := api.NewServer(agent, cfg.APIServer.Key, cfg.APIServer.Host, cfg.APIServer.Port)
 
+	if cfg.APIServer.Host != "127.0.0.1" && cfg.APIServer.Host != "localhost" {
+		log.Printf("WARNING: API server is bound to %s (not localhost). Bearer tokens and conversation data will be transmitted in plaintext. Configure TLS to secure connections.", cfg.APIServer.Host)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
