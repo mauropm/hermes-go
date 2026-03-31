@@ -105,7 +105,7 @@ func runChat(cfg *config.Config) {
 
 	provider := cfg.Provider
 	if provider == "auto" {
-		provider, _ = llm.ParseModel(cfg.Model)
+		provider = llm.DetectProvider(cfg.Model)
 	}
 
 	var apiKey string
@@ -166,7 +166,7 @@ func runAPI(cfg *config.Config) {
 
 	provider := cfg.Provider
 	if provider == "auto" {
-		provider, _ = llm.ParseModel(cfg.Model)
+		provider = llm.DetectProvider(cfg.Model)
 	}
 
 	var apiKey string

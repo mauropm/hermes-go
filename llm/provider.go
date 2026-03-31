@@ -65,7 +65,7 @@ func NewProvider(cfg ProviderConfig) (Provider, error) {
 	provider := strings.ToLower(cfg.Provider)
 
 	if provider == "auto" {
-		provider = detectProvider(cfg.Model)
+		provider = DetectProvider(cfg.Model)
 	}
 
 	switch provider {
@@ -78,7 +78,7 @@ func NewProvider(cfg ProviderConfig) (Provider, error) {
 	}
 }
 
-func detectProvider(model string) string {
+func DetectProvider(model string) string {
 	lower := strings.ToLower(model)
 	if strings.HasPrefix(lower, "anthropic/") || strings.HasPrefix(lower, "claude") {
 		return "anthropic"
