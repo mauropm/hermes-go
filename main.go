@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const version = "0.1.0"
+const version = "0.5.0"
 
 func main() {
 	var (
