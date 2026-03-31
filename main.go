@@ -69,11 +69,13 @@ func main() {
 		runChat(cfg)
 	case "api", "gateway":
 		runAPI(cfg)
+	case "setup":
+		runSetup(cfg)
 	case "version":
 		fmt.Printf("hermes-go %s\n", version)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
-		fmt.Fprintf(os.Stderr, "Usage: hermes-go [chat|api] [-p profile]\n")
+		fmt.Fprintf(os.Stderr, "Usage: hermes-go [chat|api|setup] [-p profile]\n")
 		os.Exit(1)
 	}
 }
@@ -195,4 +197,18 @@ func runAPI(cfg *config.Config) {
 	}
 
 	log.Println("Server stopped.")
+}
+
+func runSetup(cfg *config.Config) {
+	fmt.Println("╔══════════════════════════════════════════╗")
+	fmt.Println("║       Hermes Setup Wizard                ║")
+	fmt.Println("╚══════════════════════════════════════════╝")
+	fmt.Println()
+	fmt.Printf("Config directory: %s\n", cfg.HomeDir)
+	fmt.Println()
+
+	tui := cli.NewConfigTUI(cfg)
+	if err := tui.Run(); err != nil {
+		log.Fatalf("Setup failed: %v", err)
+	}
 }

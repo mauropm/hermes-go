@@ -5,7 +5,7 @@ CGO_ENABLED ?= 1
 MIN_GO_VER  := 1.22
 
 .PHONY: all build build-static clean test vet lint \
-        run-chat run-api help \
+        run-chat run-api run-setup help \
         audit security deps go-version mod-tidy mod-verify \
         govulncheck check-vulns
 
@@ -117,6 +117,9 @@ run-chat: build
 run-api: build
 	./$(BINARY) api
 
+run-setup: build
+	./$(BINARY) setup
+
 ## ── Help ───────────────────────────────────────────────
 
 help:
@@ -143,6 +146,7 @@ help:
 	@echo "  Run"
 	@echo "    run-chat       Build and run the interactive CLI"
 	@echo "    run-api        Build and run the API server"
+	@echo "    run-setup      Build and run the setup wizard"
 	@echo ""
 	@echo "  Other"
 	@echo "    help           Show this help"

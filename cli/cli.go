@@ -118,6 +118,8 @@ func (c *CLI) handleCommand(ctx context.Context, input string) error {
 		fmt.Println("  /help         - Show this help message")
 		fmt.Println("  /session      - Show current session ID")
 		fmt.Println("  /tools        - List available tools")
+		fmt.Println("  /models       - List and select Bedrock models")
+		fmt.Println("  /config       - Open configuration editor")
 		fmt.Println("  /clear        - Clear the screen")
 		return nil
 	case "/session":
@@ -132,6 +134,12 @@ func (c *CLI) handleCommand(ctx context.Context, input string) error {
 		return nil
 	case "/clear":
 		fmt.Print("\033[H\033[2J")
+		return nil
+	case "/config":
+		tui := NewConfigTUI(c.cfg)
+		if err := tui.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Config error: %v\n", err)
+		}
 		return nil
 	case "/models":
 		c.handleModels(parts)
