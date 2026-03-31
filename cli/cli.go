@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/nousresearch/hermes-go/config"
 	"github.com/nousresearch/hermes-go/core"
@@ -120,6 +121,7 @@ func (c *CLI) handleCommand(ctx context.Context, input string) error {
 		fmt.Println("  /tools        - List available tools")
 		fmt.Println("  /models       - List and select Bedrock models")
 		fmt.Println("  /config       - Open configuration editor")
+		fmt.Println("  /test         - Quick test the LLM connection")
 		fmt.Println("  /clear        - Clear the screen")
 		return nil
 	case "/session":
@@ -140,6 +142,9 @@ func (c *CLI) handleCommand(ctx context.Context, input string) error {
 		if err := tui.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Config error: %v\n", err)
 		}
+		return nil
+	case "/test":
+		c.testLLM()
 		return nil
 	case "/models":
 		c.handleModels(parts)
@@ -239,5 +244,35 @@ func (c *CLI) selectBedrockModel(idx int) {
 	fmt.Printf("  Output:    $%.2f/M tokens\n", m.OutputCost)
 	fmt.Printf("  Context:   %d tokens\n", m.ContextLen)
 	fmt.Printf("  Region:    %s\n", c.cfg.Bedrock.Region)
+	fmt.Println()
+}
+
+func (c *CLI) testLLM() {
+	fmt.Println()
+	fmt.Println("Testing LLM connection...")
+	fmt.Printf("Model: %s\n", c.agent.GetModel())
+	fmt.Println()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	response, err := c.agent.Chat(ctx, "List the days of the week in order.")
+	elapsed := time.Since(start)
+
+	if err != nil {
+		fmt.Printf("FAILED: %v\n", err)
+		fmt.Println()
+		fmt.Println("Troubleshooting:")
+		fmt.Println("  - Check your internet connection")
+		fmt.Println("  - Verify API credentials are set correctly")
+		fmt.Println("  - For Bedrock: ensure AWS credentials are configured (aws sts get-caller-identity)")
+		fmt.Println("  - For Bedrock: verify the model is enabled in your AWS region")
+		return
+	}
+
+	fmt.Printf("OK (%.2fs)\n", elapsed.Seconds())
+	fmt.Println()
+	fmt.Println(response)
 	fmt.Println()
 }
