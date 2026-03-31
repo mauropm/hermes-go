@@ -41,6 +41,7 @@ type Config struct {
 	Security  SecurityConfig  `yaml:"security"`
 	Privacy   PrivacyConfig   `yaml:"privacy"`
 	APIServer APIServerConfig `yaml:"api_server"`
+	Bedrock   BedrockConfig   `yaml:"bedrock"`
 
 	APIKeys map[string]string `yaml:"-"`
 }
@@ -75,6 +76,11 @@ type APIServerConfig struct {
 	Host    string `yaml:"host"`
 	Port    int    `yaml:"port"`
 	Key     string `yaml:"-"`
+}
+
+type BedrockConfig struct {
+	Region  string `yaml:"region"`
+	Profile string `yaml:"profile"`
 }
 
 var (
@@ -147,6 +153,10 @@ func defaultConfig(homeDir string) *Config {
 			Enabled: false,
 			Host:    DefaultAPIHost,
 			Port:    DefaultAPIPort,
+		},
+		Bedrock: BedrockConfig{
+			Region:  "us-east-1",
+			Profile: "",
 		},
 		APIKeys: make(map[string]string),
 	}

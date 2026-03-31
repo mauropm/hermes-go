@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
+	"github.com/nousresearch/hermes-go/config"
 	"github.com/nousresearch/hermes-go/core"
+	"github.com/nousresearch/hermes-go/llm"
 	"github.com/nousresearch/hermes-go/security"
 )
 
@@ -19,12 +22,14 @@ const (
 
 type CLI struct {
 	agent   *core.Agent
+	cfg     *config.Config
 	scanner *bufio.Scanner
 }
 
-func NewCLI(agent *core.Agent) *CLI {
+func NewCLI(agent *core.Agent, cfg *config.Config) *CLI {
 	return &CLI{
 		agent:   agent,
+		cfg:     cfg,
 		scanner: bufio.NewScanner(os.Stdin),
 	}
 }
@@ -128,8 +133,103 @@ func (c *CLI) handleCommand(ctx context.Context, input string) error {
 	case "/clear":
 		fmt.Print("\033[H\033[2J")
 		return nil
+	case "/models":
+		c.handleModels(parts)
+		return nil
 	default:
 		fmt.Printf("Unknown command: %s. Type /help for available commands.\n", cmd)
 		return nil
 	}
+}
+
+func (c *CLI) handleModels(parts []string) {
+	if len(parts) < 2 {
+		c.printBedrockModels()
+		return
+	}
+
+	sub := strings.ToLower(parts[1])
+
+	switch sub {
+	case "list":
+		c.printBedrockModels()
+	case "use":
+		if len(parts) < 3 {
+			fmt.Println("Usage: /models use <number>")
+			fmt.Println("Run /models list to see available models.")
+			return
+		}
+		idx, err := strconv.Atoi(parts[2])
+		if err != nil {
+			fmt.Printf("Invalid model number: %s\n", parts[2])
+			return
+		}
+		c.selectBedrockModel(idx)
+	default:
+		if num, err := strconv.Atoi(sub); err == nil {
+			c.selectBedrockModel(num)
+		} else {
+			fmt.Printf("Unknown subcommand: %s. Use /models list or /models use <number>\n", sub)
+		}
+	}
+}
+
+func (c *CLI) printBedrockModels() {
+	models := llm.BedrockModels()
+
+	fmt.Println()
+	fmt.Println("Available AWS Bedrock Models:")
+	fmt.Println(strings.Repeat("-", 95))
+	fmt.Printf("%-4s %-30s %-12s %-12s %-12s %-8s\n", "#", "Model", "Input $/MTok", "Output $/MTok", "Context", "Cost")
+	fmt.Println(strings.Repeat("-", 95))
+
+	for i, m := range models {
+		costLabel := "$$$"
+		if m.InputCost <= 0.20 {
+			costLabel = "$"
+		} else if m.InputCost <= 1.00 {
+			costLabel = "$$"
+		}
+		freeLabel := ""
+		if m.IsFree() {
+			freeLabel = " [FREE]"
+		}
+		fmt.Printf("%-4d %-30s $%-11.2f $%-11.2f %-12d %-8s%s\n",
+			i+1, m.Name, m.InputCost, m.OutputCost, m.ContextLen, costLabel, freeLabel)
+	}
+
+	fmt.Println(strings.Repeat("-", 95))
+	fmt.Println()
+	fmt.Println("Select a model: /models use <number>  (e.g., /models use 1)")
+	fmt.Println()
+}
+
+func (c *CLI) selectBedrockModel(idx int) {
+	models := llm.BedrockModels()
+
+	if idx < 1 || idx > len(models) {
+		fmt.Printf("Invalid model number. Must be between 1 and %d.\n", len(models))
+		return
+	}
+
+	m := models[idx-1]
+
+	err := c.agent.SetModel(m.ID, "bedrock", "", "", c.cfg.Bedrock.Region, c.cfg.Bedrock.Profile)
+	if err != nil {
+		fmt.Printf("Failed to switch model: %v\n", err)
+		return
+	}
+
+	costLabel := "paid"
+	if m.IsFree() {
+		costLabel = "free tier"
+	}
+
+	fmt.Printf("Switched to %s (%s)\n", m.Name, costLabel)
+	fmt.Printf("  Provider:  %s\n", m.Provider)
+	fmt.Printf("  Input:     $%.2f/M tokens\n", m.InputCost)
+	fmt.Printf("  Output:    $%.2f/M tokens\n", m.OutputCost)
+	fmt.Printf("  Context:   %d tokens\n", m.ContextLen)
+	fmt.Printf("  Region:    %s\n", c.cfg.Bedrock.Region)
+	fmt.Println()
 }

@@ -255,6 +255,40 @@ func (a *Agent) GetToolDefinitions() []llm.ToolDefinition {
 	return a.toolDefs
 }
 
+func (a *Agent) SetModel(model string, provider string, apiKey string, baseURL string, bedrockRegion string, bedrockProfile string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	parsedProvider, modelName := llm.ParseModel(model)
+	if parsedProvider == "auto" {
+		parsedProvider = provider
+	}
+
+	llmProvider, err := llm.NewProvider(llm.ProviderConfig{
+		Provider:       parsedProvider,
+		APIKey:         apiKey,
+		BaseURL:        baseURL,
+		Model:          modelName,
+		Timeout:        60 * time.Second,
+		BedrockRegion:  bedrockRegion,
+		BedrockProfile: bedrockProfile,
+	})
+	if err != nil {
+		return fmt.Errorf("create provider: %w", err)
+	}
+
+	a.provider = llmProvider
+	a.model = modelName
+
+	return nil
+}
+
+func (a *Agent) GetModel() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.model
+}
+
 func BuildSystemPrompt(memoryContext string) string {
 	prompt := defaultSystemPrompt
 

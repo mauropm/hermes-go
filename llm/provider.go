@@ -52,11 +52,13 @@ type Provider interface {
 }
 
 type ProviderConfig struct {
-	Provider string
-	APIKey   string
-	BaseURL  string
-	Model    string
-	Timeout  time.Duration
+	Provider       string
+	APIKey         string
+	BaseURL        string
+	Model          string
+	Timeout        time.Duration
+	BedrockRegion  string
+	BedrockProfile string
 }
 
 func NewProvider(cfg ProviderConfig) (Provider, error) {
@@ -69,6 +71,8 @@ func NewProvider(cfg ProviderConfig) (Provider, error) {
 	switch provider {
 	case "anthropic":
 		return NewAnthropicProvider(cfg)
+	case "bedrock":
+		return NewBedrockProvider(cfg.BedrockRegion, cfg.BedrockProfile, cfg.Timeout)
 	default:
 		return NewOpenAICompatibleProvider(cfg)
 	}
@@ -78,6 +82,9 @@ func detectProvider(model string) string {
 	lower := strings.ToLower(model)
 	if strings.HasPrefix(lower, "anthropic/") || strings.HasPrefix(lower, "claude") {
 		return "anthropic"
+	}
+	if strings.Contains(lower, "bedrock") || strings.Contains(lower, "amazon") || strings.Contains(lower, "llama") || strings.Contains(lower, "mistral") || strings.Contains(lower, "cohere") || strings.Contains(lower, "ai21") || strings.Contains(lower, "deepseek") {
+		return "bedrock"
 	}
 	return "openai"
 }

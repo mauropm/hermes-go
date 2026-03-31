@@ -124,7 +124,7 @@ func runChat(cfg *config.Config) {
 		log.Printf("Warning: failed to create session record: %v", err)
 	}
 
-	c := cli.NewCLI(agent)
+	c := cli.NewCLI(agent, cfg)
 
 	if err := c.Run(); err != nil {
 		log.Printf("Session ended: %v", err)
