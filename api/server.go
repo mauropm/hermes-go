@@ -83,6 +83,7 @@ func NewServer(agent *core.Agent, apiKey string, host string, port int) *Server 
 
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/", s.handleRoot)
 
 	s.server = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", host, port),
@@ -236,6 +237,19 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"service": "hermes-go",
+		"version": "0.5.0",
+		"endpoints": map[string]string{
+			"GET  /health":              "Health check",
+			"POST /v1/chat/completions": "OpenAI-compatible chat completion",
+		},
+	})
 }
 
 func (s *Server) Start() error {
