@@ -41,18 +41,19 @@ type Agent struct {
 }
 
 type AgentConfig struct {
-	Model            string
-	Provider         string
-	APIKey           string
-	BaseURL          string
-	BedrockAccessKey string
-	BedrockSecretKey string
-	ToolRegistry     *tools.Registry
-	SessionDB        *storage.SessionDB
-	MemStore         *memory.Store
-	MaxTurns         int
-	SessionID        string
-	Source           string
+	Model              string
+	Provider           string
+	APIKey             string
+	BaseURL            string
+	BedrockBearerToken string
+	BedrockAccessKey   string
+	BedrockSecretKey   string
+	ToolRegistry       *tools.Registry
+	SessionDB          *storage.SessionDB
+	MemStore           *memory.Store
+	MaxTurns           int
+	SessionID          string
+	Source             string
 }
 
 func NewAgent(cfg AgentConfig) (*Agent, error) {
@@ -62,13 +63,14 @@ func NewAgent(cfg AgentConfig) (*Agent, error) {
 	}
 
 	llmProvider, err := llm.NewProvider(llm.ProviderConfig{
-		Provider:         provider,
-		APIKey:           cfg.APIKey,
-		BaseURL:          cfg.BaseURL,
-		Model:            modelName,
-		Timeout:          60 * time.Second,
-		BedrockAccessKey: cfg.BedrockAccessKey,
-		BedrockSecretKey: cfg.BedrockSecretKey,
+		Provider:           provider,
+		APIKey:             cfg.APIKey,
+		BaseURL:            cfg.BaseURL,
+		Model:              modelName,
+		Timeout:            60 * time.Second,
+		BedrockBearerToken: cfg.BedrockBearerToken,
+		BedrockAccessKey:   cfg.BedrockAccessKey,
+		BedrockSecretKey:   cfg.BedrockSecretKey,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create provider: %w", err)
@@ -273,15 +275,16 @@ func (a *Agent) SetModel(model string, provider string, apiKey string, baseURL s
 	}
 
 	llmProvider, err := llm.NewProvider(llm.ProviderConfig{
-		Provider:         parsedProvider,
-		APIKey:           apiKey,
-		BaseURL:          baseURL,
-		Model:            modelName,
-		Timeout:          60 * time.Second,
-		BedrockRegion:    bedrockRegion,
-		BedrockProfile:   bedrockProfile,
-		BedrockAccessKey: a.bedrockAccessKey,
-		BedrockSecretKey: a.bedrockSecretKey,
+		Provider:           parsedProvider,
+		APIKey:             apiKey,
+		BaseURL:            baseURL,
+		Model:              modelName,
+		Timeout:            60 * time.Second,
+		BedrockRegion:      bedrockRegion,
+		BedrockProfile:     bedrockProfile,
+		BedrockBearerToken: a.bedrockAccessKey,
+		BedrockAccessKey:   a.bedrockAccessKey,
+		BedrockSecretKey:   a.bedrockSecretKey,
 	})
 	if err != nil {
 		return fmt.Errorf("create provider: %w", err)

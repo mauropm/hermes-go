@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -12,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/aws/smithy-go/auth/bearer"
 )
 
 type BedrockProvider struct {
@@ -20,28 +22,44 @@ type BedrockProvider struct {
 	timeout time.Duration
 }
 
-func NewBedrockProvider(region string, profile string, accessKeyID string, secretAccessKey string, timeout time.Duration) (*BedrockProvider, error) {
+func NewBedrockProvider(region string, profile string, bearerToken string, accessKeyID string, secretAccessKey string, timeout time.Duration) (*BedrockProvider, error) {
 	if region == "" {
 		region = "us-east-1"
 	}
 
-	opts := []func(*config.LoadOptions) error{
-		config.WithRegion(region),
+	if bearerToken == "" {
+		bearerToken = os.Getenv("AWS_BEARER_TOKEN_BEDROCK")
 	}
 
-	if profile != "" {
-		opts = append(opts, config.WithSharedConfigProfile(profile))
-	}
+	var cfg aws.Config
+	var err error
 
-	if accessKeyID != "" && secretAccessKey != "" {
-		opts = append(opts, config.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, ""),
-		))
-	}
+	if bearerToken != "" {
+		cfg = aws.Config{
+			Region: region,
+			BearerAuthTokenProvider: bearer.StaticTokenProvider{
+				Token: bearer.Token{Value: bearerToken},
+			},
+		}
+	} else {
+		opts := []func(*config.LoadOptions) error{
+			config.WithRegion(region),
+		}
 
-	cfg, err := config.LoadDefaultConfig(context.Background(), opts...)
-	if err != nil {
-		return nil, fmt.Errorf("load AWS config: %w", err)
+		if profile != "" {
+			opts = append(opts, config.WithSharedConfigProfile(profile))
+		}
+
+		if accessKeyID != "" && secretAccessKey != "" {
+			opts = append(opts, config.WithCredentialsProvider(
+				credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, ""),
+			))
+		}
+
+		cfg, err = config.LoadDefaultConfig(context.Background(), opts...)
+		if err != nil {
+			return nil, fmt.Errorf("load AWS config: %w", err)
+		}
 	}
 
 	if timeout == 0 {
