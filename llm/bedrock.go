@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
@@ -34,12 +35,7 @@ func NewBedrockProvider(region string, profile string, accessKeyID string, secre
 
 	if accessKeyID != "" && secretAccessKey != "" {
 		opts = append(opts, config.WithCredentialsProvider(
-			aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
-				return aws.Credentials{
-					AccessKeyID:     accessKeyID,
-					SecretAccessKey: secretAccessKey,
-				}, nil
-			}),
+			credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, ""),
 		))
 	}
 
