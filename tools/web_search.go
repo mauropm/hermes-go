@@ -29,11 +29,11 @@ type SearchResult struct {
 func RegisterWebSearchTool(registry *Registry) error {
 	return registry.Register(&Tool{
 		Name:        "web_search",
-		Description: "Search the web for current information. Returns relevant results with titles, URLs, and snippets.",
+		Description: "Search the web for current information. Use this tool when the user asks to search, look up, or find information about any topic, person, place, or event. Always extract the core search terms from the user's request.",
 		Schema: DefaultSchema("web_search", "Search the web for information", map[string]interface{}{
 			"query": map[string]interface{}{
 				"type":        "string",
-				"description": "Search query (be specific and concise)",
+				"description": "The search query. Use concise, specific keywords extracted from the user's request. Do not include conversational phrases.",
 			},
 		}, []string{"query"}),
 		Handler: func(args map[string]interface{}) string {
