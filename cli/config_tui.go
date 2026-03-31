@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nousresearch/hermes-go/config"
+	"github.com/nousresearch/hermes-go/llm"
 )
 
 type ConfigTUI struct {
@@ -55,7 +56,7 @@ func (t *ConfigTUI) printMenu() {
 	fmt.Println("╔══════════════════════════════════════════╗")
 	fmt.Println("║         Hermes Configuration             ║")
 	fmt.Println("╠══════════════════════════════════════════╣")
-	fmt.Printf("║  1. Model          │ %-29s ║\n", t.cfg.Model)
+	fmt.Printf("║  1. Model          │ %-29s ║\n", t.shortModel())
 	fmt.Printf("║  2. Max Turns      │ %-29d ║\n", t.cfg.Agent.MaxTurns)
 	fmt.Printf("║  3. Memory         │ %-29t ║\n", t.cfg.Memory.Enabled)
 	fmt.Printf("║  4. Redact Secrets │ %-29t ║\n", t.cfg.Security.RedactSecrets)
@@ -71,6 +72,14 @@ func (t *ConfigTUI) printMenu() {
 	fmt.Print("\nSelect option (0-10): ")
 }
 
+func (t *ConfigTUI) shortModel() string {
+	m := t.cfg.Model
+	if len(m) > 29 {
+		return m[:26] + "..."
+	}
+	return m
+}
+
 func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 	switch choice {
 	case 0:
@@ -81,21 +90,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 		return true, nil
 
 	case 1:
-		fmt.Println()
-		fmt.Println("Set model (e.g., anthropic/claude-sonnet-4-20250514):")
-		fmt.Println("  Popular choices:")
-		fmt.Println("    anthropic/claude-sonnet-4-20250514")
-		fmt.Println("    anthropic/claude-opus-4-20250514")
-		fmt.Println("    openai/gpt-4o")
-		fmt.Println("  Or type a Bedrock model ID from /models list.")
-		fmt.Print("  Model: ")
-		if !t.scanner.Scan() {
-			return false, nil
-		}
-		val := strings.TrimSpace(t.scanner.Text())
-		if val != "" {
-			t.cfg.SetModel(val)
-		}
+		t.selectModel()
 
 	case 2:
 		fmt.Print("Max turns (1-200): ")
@@ -199,4 +194,94 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (t *ConfigTUI) selectModel() {
+	fmt.Println()
+	fmt.Println("Select a model provider:")
+	fmt.Println("  1. AWS Bedrock  (uses AWS credentials)")
+	fmt.Println("  2. Anthropic    (direct API)")
+	fmt.Println("  3. OpenAI       (direct API)")
+	fmt.Println("  4. Custom       (manual model ID)")
+	fmt.Print("\nChoice (1-4): ")
+	if !t.scanner.Scan() {
+		return
+	}
+	provChoice := strings.TrimSpace(t.scanner.Text())
+
+	switch provChoice {
+	case "1":
+		t.selectBedrockModel()
+	case "2":
+		t.cfg.SetModel("anthropic/claude-sonnet-4-20250514")
+		fmt.Println("Set to: anthropic/claude-sonnet-4-20250514")
+	case "3":
+		t.cfg.SetModel("openai/gpt-4o")
+		fmt.Println("Set to: openai/gpt-4o")
+	case "4":
+		fmt.Print("Enter model ID (e.g., anthropic/claude-sonnet-4-20250514): ")
+		if !t.scanner.Scan() {
+			return
+		}
+		val := strings.TrimSpace(t.scanner.Text())
+		if val != "" {
+			t.cfg.SetModel(val)
+		}
+	default:
+		fmt.Println("Invalid choice.")
+	}
+}
+
+func (t *ConfigTUI) selectBedrockModel() {
+	models := llm.BedrockModels()
+
+	fmt.Println()
+	fmt.Println("AWS Bedrock Models:")
+	fmt.Println(strings.Repeat("-", 70))
+	fmt.Printf("%-4s %-28s %-10s %-8s\n", "#", "Model", "Input$/MT", "Cost")
+	fmt.Println(strings.Repeat("-", 70))
+
+	for i, m := range models {
+		costLabel := "$$$"
+		if m.IsFree() {
+			costLabel = "FREE"
+		} else if m.InputCost <= 0.20 {
+			costLabel = "$"
+		} else if m.InputCost <= 1.00 {
+			costLabel = "$$"
+		}
+		fmt.Printf("%-4d %-28s $%-9.2f %-8s\n",
+			i+1, m.Name, m.InputCost, costLabel)
+	}
+
+	fmt.Println(strings.Repeat("-", 70))
+	fmt.Printf("\nCurrent: %s\n", t.cfg.Model)
+	fmt.Print("\nSelect model number (or 0 to cancel): ")
+	if !t.scanner.Scan() {
+		return
+	}
+	val := strings.TrimSpace(t.scanner.Text())
+
+	idx, err := strconv.Atoi(val)
+	if err != nil || idx < 0 || idx > len(models) {
+		fmt.Println("Invalid selection.")
+		return
+	}
+	if idx == 0 {
+		return
+	}
+
+	m := models[idx-1]
+	t.cfg.SetModel(m.ID)
+
+	costLabel := "paid"
+	if m.IsFree() {
+		costLabel = "free tier"
+	}
+
+	fmt.Printf("\nSelected: %s (%s)\n", m.Name, costLabel)
+	fmt.Printf("  Provider: %s\n", m.Provider)
+	fmt.Printf("  Input:    $%.2f/M tokens\n", m.InputCost)
+	fmt.Printf("  Output:   $%.2f/M tokens\n", m.OutputCost)
+	fmt.Printf("  Context:  %d tokens\n", m.ContextLen)
 }
