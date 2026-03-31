@@ -117,15 +117,17 @@ func runChat(cfg *config.Config) {
 	}
 
 	agent, err := core.NewAgent(core.AgentConfig{
-		Model:        cfg.Model,
-		Provider:     provider,
-		APIKey:       apiKey,
-		ToolRegistry: toolRegistry,
-		SessionDB:    sessionDB,
-		MemStore:     memStore,
-		MaxTurns:     cfg.Agent.MaxTurns,
-		SessionID:    sessionID,
-		Source:       "cli",
+		Model:            cfg.Model,
+		Provider:         provider,
+		APIKey:           apiKey,
+		BedrockAccessKey: cfg.GetAWSAccessKeyID(),
+		BedrockSecretKey: cfg.GetAWSSecretAccessKey(),
+		ToolRegistry:     toolRegistry,
+		SessionDB:        sessionDB,
+		MemStore:         memStore,
+		MaxTurns:         cfg.Agent.MaxTurns,
+		SessionID:        sessionID,
+		Source:           "cli",
 	})
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)
@@ -178,14 +180,16 @@ func runAPI(cfg *config.Config) {
 	}
 
 	agent, err := core.NewAgent(core.AgentConfig{
-		Model:        cfg.Model,
-		Provider:     provider,
-		APIKey:       apiKey,
-		ToolRegistry: toolRegistry,
-		SessionDB:    sessionDB,
-		MaxTurns:     cfg.Agent.MaxTurns,
-		SessionID:    sessionID,
-		Source:       "api",
+		Model:            cfg.Model,
+		Provider:         provider,
+		APIKey:           apiKey,
+		BedrockAccessKey: cfg.GetAWSAccessKeyID(),
+		BedrockSecretKey: cfg.GetAWSSecretAccessKey(),
+		ToolRegistry:     toolRegistry,
+		SessionDB:        sessionDB,
+		MaxTurns:         cfg.Agent.MaxTurns,
+		SessionID:        sessionID,
+		Source:           "api",
 	})
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)

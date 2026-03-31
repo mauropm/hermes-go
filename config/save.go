@@ -106,3 +106,15 @@ func (cfg *Config) SetToolUseMode(mode string) {
 	defer cfg.mu.Unlock()
 	cfg.Agent.ToolUseMode = mode
 }
+
+func (cfg *Config) SetBedrockAccessKey(key string) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.Bedrock.AccessKeyID = key
+}
+
+func (cfg *Config) SetBedrockSecretKey(key string) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.Bedrock.SecretAccessKey = key
+}

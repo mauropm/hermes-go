@@ -20,35 +20,39 @@ const (
 )
 
 type Agent struct {
-	mu           sync.Mutex
-	model        string
-	provider     llm.Provider
-	toolRegistry *tools.Registry
-	sessionDB    *storage.SessionDB
-	memStore     *memory.Store
-	maxTurns     int
-	sessionID    string
-	source       string
-	messages     []llm.Message
-	toolDefs     []llm.ToolDefinition
-	interrupted  bool
-	startedAt    time.Time
-	totalTokens  int
-	totalCost    float64
-	validator    *security.InputValidator
+	mu               sync.Mutex
+	model            string
+	provider         llm.Provider
+	toolRegistry     *tools.Registry
+	sessionDB        *storage.SessionDB
+	memStore         *memory.Store
+	maxTurns         int
+	sessionID        string
+	source           string
+	messages         []llm.Message
+	toolDefs         []llm.ToolDefinition
+	interrupted      bool
+	startedAt        time.Time
+	totalTokens      int
+	totalCost        float64
+	validator        *security.InputValidator
+	bedrockAccessKey string
+	bedrockSecretKey string
 }
 
 type AgentConfig struct {
-	Model        string
-	Provider     string
-	APIKey       string
-	BaseURL      string
-	ToolRegistry *tools.Registry
-	SessionDB    *storage.SessionDB
-	MemStore     *memory.Store
-	MaxTurns     int
-	SessionID    string
-	Source       string
+	Model            string
+	Provider         string
+	APIKey           string
+	BaseURL          string
+	BedrockAccessKey string
+	BedrockSecretKey string
+	ToolRegistry     *tools.Registry
+	SessionDB        *storage.SessionDB
+	MemStore         *memory.Store
+	MaxTurns         int
+	SessionID        string
+	Source           string
 }
 
 func NewAgent(cfg AgentConfig) (*Agent, error) {
@@ -58,27 +62,31 @@ func NewAgent(cfg AgentConfig) (*Agent, error) {
 	}
 
 	llmProvider, err := llm.NewProvider(llm.ProviderConfig{
-		Provider: provider,
-		APIKey:   cfg.APIKey,
-		BaseURL:  cfg.BaseURL,
-		Model:    modelName,
-		Timeout:  60 * time.Second,
+		Provider:         provider,
+		APIKey:           cfg.APIKey,
+		BaseURL:          cfg.BaseURL,
+		Model:            modelName,
+		Timeout:          60 * time.Second,
+		BedrockAccessKey: cfg.BedrockAccessKey,
+		BedrockSecretKey: cfg.BedrockSecretKey,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create provider: %w", err)
 	}
 
 	a := &Agent{
-		model:        modelName,
-		provider:     llmProvider,
-		toolRegistry: cfg.ToolRegistry,
-		sessionDB:    cfg.SessionDB,
-		memStore:     cfg.MemStore,
-		maxTurns:     cfg.MaxTurns,
-		sessionID:    cfg.SessionID,
-		source:       cfg.Source,
-		validator:    security.NewInputValidator(),
-		startedAt:    time.Now(),
+		model:            modelName,
+		provider:         llmProvider,
+		toolRegistry:     cfg.ToolRegistry,
+		sessionDB:        cfg.SessionDB,
+		memStore:         cfg.MemStore,
+		maxTurns:         cfg.MaxTurns,
+		sessionID:        cfg.SessionID,
+		source:           cfg.Source,
+		validator:        security.NewInputValidator(),
+		startedAt:        time.Now(),
+		bedrockAccessKey: cfg.BedrockAccessKey,
+		bedrockSecretKey: cfg.BedrockSecretKey,
 	}
 
 	a.messages = []llm.Message{
@@ -265,13 +273,15 @@ func (a *Agent) SetModel(model string, provider string, apiKey string, baseURL s
 	}
 
 	llmProvider, err := llm.NewProvider(llm.ProviderConfig{
-		Provider:       parsedProvider,
-		APIKey:         apiKey,
-		BaseURL:        baseURL,
-		Model:          modelName,
-		Timeout:        60 * time.Second,
-		BedrockRegion:  bedrockRegion,
-		BedrockProfile: bedrockProfile,
+		Provider:         parsedProvider,
+		APIKey:           apiKey,
+		BaseURL:          baseURL,
+		Model:            modelName,
+		Timeout:          60 * time.Second,
+		BedrockRegion:    bedrockRegion,
+		BedrockProfile:   bedrockProfile,
+		BedrockAccessKey: a.bedrockAccessKey,
+		BedrockSecretKey: a.bedrockSecretKey,
 	})
 	if err != nil {
 		return fmt.Errorf("create provider: %w", err)

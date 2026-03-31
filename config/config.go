@@ -79,8 +79,10 @@ type APIServerConfig struct {
 }
 
 type BedrockConfig struct {
-	Region  string `yaml:"region"`
-	Profile string `yaml:"profile"`
+	Region          string `yaml:"region"`
+	Profile         string `yaml:"profile"`
+	AccessKeyID     string `yaml:"access_key_id,omitempty"`
+	SecretAccessKey string `yaml:"secret_access_key,omitempty"`
 }
 
 var (
@@ -238,6 +240,7 @@ func loadAPIKeys() map[string]string {
 		"GLM_API_KEY", "KIMI_API_KEY", "MINIMAX_API_KEY",
 		"OPENCODE_ZEN_API_KEY", "HF_TOKEN", "DASHSCOPE_API_KEY",
 		"API_SERVER_KEY",
+		"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
 	}
 	for _, v := range keyVars {
 		if val := os.Getenv(v); val != "" {
@@ -326,6 +329,24 @@ func (cfg *Config) GetAPIKey(provider string) string {
 		return cfg.APIKeys[varName]
 	}
 	return ""
+}
+
+func (cfg *Config) GetAWSAccessKeyID() string {
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+	if cfg.Bedrock.AccessKeyID != "" {
+		return cfg.Bedrock.AccessKeyID
+	}
+	return cfg.APIKeys["AWS_ACCESS_KEY_ID"]
+}
+
+func (cfg *Config) GetAWSSecretAccessKey() string {
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+	if cfg.Bedrock.SecretAccessKey != "" {
+		return cfg.Bedrock.SecretAccessKey
+	}
+	return cfg.APIKeys["AWS_SECRET_ACCESS_KEY"]
 }
 
 func (cfg *Config) EnsureDirs() error {

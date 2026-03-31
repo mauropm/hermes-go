@@ -52,13 +52,15 @@ type Provider interface {
 }
 
 type ProviderConfig struct {
-	Provider       string
-	APIKey         string
-	BaseURL        string
-	Model          string
-	Timeout        time.Duration
-	BedrockRegion  string
-	BedrockProfile string
+	Provider         string
+	APIKey           string
+	BaseURL          string
+	Model            string
+	Timeout          time.Duration
+	BedrockRegion    string
+	BedrockProfile   string
+	BedrockAccessKey string
+	BedrockSecretKey string
 }
 
 func NewProvider(cfg ProviderConfig) (Provider, error) {
@@ -72,7 +74,7 @@ func NewProvider(cfg ProviderConfig) (Provider, error) {
 	case "anthropic":
 		return NewAnthropicProvider(cfg)
 	case "bedrock":
-		return NewBedrockProvider(cfg.BedrockRegion, cfg.BedrockProfile, cfg.Timeout)
+		return NewBedrockProvider(cfg.BedrockRegion, cfg.BedrockProfile, cfg.BedrockAccessKey, cfg.BedrockSecretKey, cfg.Timeout)
 	default:
 		return NewOpenAICompatibleProvider(cfg)
 	}

@@ -19,7 +19,7 @@ type BedrockProvider struct {
 	timeout time.Duration
 }
 
-func NewBedrockProvider(region string, profile string, timeout time.Duration) (*BedrockProvider, error) {
+func NewBedrockProvider(region string, profile string, accessKeyID string, secretAccessKey string, timeout time.Duration) (*BedrockProvider, error) {
 	if region == "" {
 		region = "us-east-1"
 	}
@@ -30,6 +30,17 @@ func NewBedrockProvider(region string, profile string, timeout time.Duration) (*
 
 	if profile != "" {
 		opts = append(opts, config.WithSharedConfigProfile(profile))
+	}
+
+	if accessKeyID != "" && secretAccessKey != "" {
+		opts = append(opts, config.WithCredentialsProvider(
+			aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
+				return aws.Credentials{
+					AccessKeyID:     accessKeyID,
+					SecretAccessKey: secretAccessKey,
+				}, nil
+			}),
+		))
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.Background(), opts...)
