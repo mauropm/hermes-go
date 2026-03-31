@@ -6,16 +6,17 @@ MIN_GO_VER  := 1.22
 
 .PHONY: all build build-static clean test vet lint \
         run-chat run-api help \
-        audit security deps go-version mod-tidy mod-verify check
+        audit security deps go-version mod-tidy mod-verify \
+        govulncheck check-vulns
 
 all: build
 
 ## ── Build ──────────────────────────────────────────────
 
-build:
+build: check-vulns
 	$(GO) build -o $(BINARY) .
 
-build-static:
+build-static: check-vulns
 	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -ldflags="-s -w" -o $(BINARY) .
 
 clean:
@@ -82,6 +83,23 @@ deps:
 govulncheck:
 	@echo "==> Running govulncheck..."
 	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+# Pre-build vulnerability check — warns and blocks on findings
+check-vulns:
+	@echo "==> Checking for known vulnerabilities..."
+	@vuln_output=$$($(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./... 2>&1); \
+	vuln_exit=$$?; \
+	echo "$$vuln_output"; \
+	if [ $$vuln_exit -ne 0 ]; then \
+		echo ""; \
+		echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"; \
+		echo " WARNING: Known vulnerabilities found in dependencies!"; \
+		echo " Build blocked. Run 'make govulncheck' for details."; \
+		echo " Update deps with 'go get -u ./...' and 'go mod tidy'."; \
+		echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"; \
+		exit 1; \
+	fi
+	@echo "==> No vulnerabilities found."
 
 # Full security audit: version + modules + vulnerabilities
 audit: go-version mod-verify mod-tidy govulncheck deps
