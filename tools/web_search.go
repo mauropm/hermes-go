@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -71,18 +72,111 @@ func RegisterWebSearchTool(registry *Registry) error {
 }
 
 func performWebSearch(query string) ([]SearchResult, error) {
+	results, err := searchDuckDuckGoInstantAnswer(query)
+	if err == nil && len(results) > 0 {
+		return results, nil
+	}
+
+	results, err = searchDuckDuckGoHTML(query)
+	if err == nil && len(results) > 0 {
+		return results, nil
+	}
+
+	results, err = searchDuckDuckGoLite(query)
+	if err == nil && len(results) > 0 {
+		return results, nil
+	}
+
+	return nil, fmt.Errorf("all search backends failed")
+}
+
+func searchDuckDuckGoInstantAnswer(query string) ([]SearchResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), webSearchTimeout)
 	defer cancel()
 
-	escapedQuery := url.QueryEscape(query)
-	searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", escapedQuery)
+	apiURL := fmt.Sprintf("https://api.duckduckgo.com/?q=%s&format=json&no_html=1&skip_disambig=1", url.QueryEscape(query))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	client := &http.Client{Timeout: webSearchTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("instant answer API returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
+	if err != nil {
+		return nil, err
+	}
+
+	var iaResp ddgInstantAnswer
+	if err := json.Unmarshal(body, &iaResp); err != nil {
+		return nil, fmt.Errorf("parse instant answer response: %w", err)
+	}
+
+	var results []SearchResult
+
+	if iaResp.AbstractText != "" && iaResp.AbstractURL != "" {
+		results = append(results, SearchResult{
+			Title:   iaResp.Heading,
+			URL:     iaResp.AbstractURL,
+			Snippet: iaResp.AbstractText,
+		})
+	}
+
+	for _, rel := range iaResp.RelatedTopics {
+		if len(results) >= webSearchMaxResults {
+			break
+		}
+		if rel.FirstURL != "" && rel.Text != "" {
+			results = append(results, SearchResult{
+				Title:   rel.Text,
+				URL:     rel.FirstURL,
+				Snippet: rel.Text,
+			})
+		}
+		if len(results) >= webSearchMaxResults {
+			break
+		}
+		for _, sub := range rel.Topics {
+			if len(results) >= webSearchMaxResults {
+				break
+			}
+			if sub.FirstURL != "" && sub.Text != "" {
+				results = append(results, SearchResult{
+					Title:   sub.Text,
+					URL:     sub.FirstURL,
+					Snippet: sub.Text,
+				})
+			}
+		}
+	}
+
+	return results, nil
+}
+
+func searchDuckDuckGoHTML(query string) ([]SearchResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), webSearchTimeout)
+	defer cancel()
+
+	searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, err
 	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Hermes-Go/0.6.0; +https://github.com/nousresearch/hermes-go)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 
 	client := &http.Client{
 		Timeout: webSearchTimeout,
@@ -93,7 +187,7 @@ func performWebSearch(query string) ([]SearchResult, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("search request failed: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -103,10 +197,46 @@ func performWebSearch(query string) ([]SearchResult, error) {
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024))
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, err
 	}
 
-	return parseDuckDuckGoResults(string(body))
+	html := string(body)
+	if strings.Contains(html, "anomaly-modal") || strings.Contains(html, "challenge") {
+		return nil, fmt.Errorf("CAPTCHA challenge")
+	}
+
+	return parseDuckDuckGoResults(html)
+}
+
+func searchDuckDuckGoLite(query string) ([]SearchResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), webSearchTimeout)
+	defer cancel()
+
+	searchURL := fmt.Sprintf("https://lite.duckduckgo.com/lite/?q=%s", url.QueryEscape(query))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	client := &http.Client{Timeout: webSearchTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("lite search returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024))
+	if err != nil {
+		return nil, err
+	}
+
+	return parseDuckDuckGoLiteResults(string(body))
 }
 
 func parseDuckDuckGoResults(html string) ([]SearchResult, error) {
@@ -124,7 +254,11 @@ func parseDuckDuckGoResults(html string) ([]SearchResult, error) {
 		title := extractBetween(block, `<a rel="nofollow" class="result__a"`, `</a>`)
 		title = extractText(title)
 
-		url := extractAttr(block, `<a rel="nofollow" class="result__a"`, `href="`)
+		rawURL := extractAttr(block, `<a rel="nofollow" class="result__a"`, `href="`)
+		if rawURL == "" {
+			rawURL = extractAttr(block, `<a class="result__a"`, `href="`)
+		}
+		finalURL := resolveDuckDuckGoURL(rawURL)
 
 		snippet := extractBetween(block, `<a class="result__snippet"`, `</a>`)
 		if snippet == "" {
@@ -142,12 +276,75 @@ func parseDuckDuckGoResults(html string) ([]SearchResult, error) {
 
 		results = append(results, SearchResult{
 			Title:   security.Truncate(title, 200),
-			URL:     url,
+			URL:     finalURL,
 			Snippet: snippet,
 		})
 	}
 
 	return results, nil
+}
+
+func parseDuckDuckGoLiteResults(html string) ([]SearchResult, error) {
+	var results []SearchResult
+
+	linkRe := regexp.MustCompile(`rel="nofollow" href="([^"]*)"`)
+	titleRe := regexp.MustCompile(`class="result-link"[^>]*>([^<]*)</a>`)
+	snippetRe := regexp.MustCompile(`class="result-snippet"[^>]*>([^<]*)</td>`)
+
+	links := linkRe.FindAllStringSubmatch(html, -1)
+	titles := titleRe.FindAllStringSubmatch(html, -1)
+	snippets := snippetRe.FindAllStringSubmatch(html, -1)
+
+	maxLen := len(links)
+	if len(titles) < maxLen {
+		maxLen = len(titles)
+	}
+	if len(snippets) < maxLen {
+		maxLen = len(snippets)
+	}
+
+	for i := 0; i < maxLen && i < webSearchMaxResults; i++ {
+		rawURL := resolveDuckDuckGoURL(links[i][1])
+		title := strings.TrimSpace(titles[i][1])
+		snippet := strings.TrimSpace(snippets[i][1])
+
+		if title == "" || rawURL == "" {
+			continue
+		}
+
+		results = append(results, SearchResult{
+			Title:   security.Truncate(title, 200),
+			URL:     rawURL,
+			Snippet: security.Truncate(snippet, webSearchMaxSnippetLen),
+		})
+	}
+
+	return results, nil
+}
+
+func resolveDuckDuckGoURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(rawURL, "//duckduckgo.com/l/") || strings.Contains(rawURL, "uddg=") {
+		parsed, err := url.Parse(rawURL)
+		if err == nil {
+			uddg := parsed.Query().Get("uddg")
+			if uddg != "" {
+				decoded, err := url.QueryUnescape(uddg)
+				if err == nil {
+					return decoded
+				}
+			}
+		}
+	}
+
+	if strings.HasPrefix(rawURL, "//") {
+		return "https:" + rawURL
+	}
+
+	return rawURL
 }
 
 func splitResults(html string) []string {
@@ -282,6 +479,22 @@ func extractText(html string) string {
 	}
 
 	return strings.TrimSpace(text)
+}
+
+type ddgInstantAnswer struct {
+	Heading        string `json:"Heading"`
+	AbstractText   string `json:"AbstractText"`
+	AbstractURL    string `json:"AbstractURL"`
+	RelatedTopics  []ddgRelatedTopic
+	Disambiguation []ddgRelatedTopic `json:"Results"`
+}
+
+type ddgRelatedTopic struct {
+	Text     string            `json:"Text"`
+	FirstURL string            `json:"FirstURL"`
+	Icon     map[string]string `json:"Icon"`
+	Name     string            `json:"Name"`
+	Topics   []ddgRelatedTopic `json:"Topics"`
 }
 
 type webSearchResponse struct {
