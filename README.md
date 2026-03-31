@@ -6,7 +6,10 @@ A secure, hardened Go reimagination of the Hermes AI agent framework. Built for 
 
 ```bash
 # Build
-go build -o hermes-go .
+make build
+
+# First-time setup wizard
+./hermes-go setup
 
 # Run interactive CLI
 ANTHROPIC_API_KEY=your-key ./hermes-go chat
@@ -20,11 +23,11 @@ ANTHROPIC_API_KEY=your-key API_SERVER_KEY=your-api-token ./hermes-go api
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        INTERFACE LAYER                           │
-│  ┌──────────────────┐              ┌──────────────────────────┐  │
-│  │   CLI (REPL)     │              │   API Server (HTTP)      │  │
-│  │   cli/cli.go     │              │   api/server.go          │  │
-│  └────────┬─────────┘              └────────────┬─────────────┘  │
-├───────────┼─────────────────────────────────────┼───────────────┤
+│  ┌──────────────────┐  ┌─────────────┐  ┌────────────────────┐  │
+│  │   CLI (REPL)     │  │ Setup TUI   │  │ API Server (HTTP)  │  │
+│  │   cli/cli.go     │  │ config_tui  │  │ api/server.go      │  │
+│  └────────┬─────────┘  └─────────────┘  └────────┬───────────┘  │
+├───────────┼───────────────────────────────────────┼─────────────┤
 │                    ORCHESTRATION LAYER                             │
 │  ┌──────────────────────────────────────────────────────────┐    │
 │  │                    AIAgent                                │    │
@@ -40,10 +43,13 @@ ANTHROPIC_API_KEY=your-key API_SERVER_KEY=your-api-token ./hermes-go api
 │  └──────────────────────────┬───────────────────────────────┘    │
 ├─────────────────────────────┼───────────────────────────────────┤
 │                   INFRASTRUCTURE LAYER                            │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐   │
-│  │ SQLite   │ │ Memory   │ │ LLM      │ │ Security Layer   │   │
-│  │ storage/ │ │ memory/  │ │ llm/     │ │ security/        │   │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────────────┘   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────────────┐ ┌────────────┐ │
+│  │ SQLite   │ │ Memory   │ │ LLM Providers    │ │ Security   │ │
+│  │ storage/ │ │ memory/  │ │ llm/             │ │ security/  │ │
+│  │          │ │          │ │ • OpenAI         │ │            │ │
+│  │          │ │          │ │ • Anthropic      │ │            │ │
+│  │          │ │          │ │ • AWS Bedrock    │ │            │ │
+│  └──────────┘ └──────────┘ └──────────────────┘ └────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -51,15 +57,15 @@ ANTHROPIC_API_KEY=your-key API_SERVER_KEY=your-api-token ./hermes-go api
 
 | Package | Purpose |
 |---------|---------|
-| `config/` | Configuration loading from env, `.env`, YAML. Secrets management. |
+| `config/` | Configuration loading from env, `.env`, YAML. Secrets management. Save & setters. |
 | `security/` | Input validation, sanitization, LLM safety filters, secret redaction. |
 | `storage/` | SQLite session store with WAL mode, migrations, FTS5 search. |
 | `memory/` | Secure local memory with sanitization, TTL, deduplication, size limits. |
-| `llm/` | Provider interface. OpenAI-compatible and Anthropic implementations. |
-| `core/` | Agent orchestrator: conversation loop, tool dispatch, context compression. |
+| `llm/` | Provider interface. OpenAI-compatible, Anthropic, and AWS Bedrock implementations. |
+| `core/` | Agent orchestrator: conversation loop, tool dispatch, context compression, runtime model switching. |
 | `tools/` | Tool registry. Only safe, read-only tools enabled by default. |
 | `api/` | HTTP API server with auth, rate limiting, request validation. |
-| `cli/` | Interactive REPL with slash commands and signal handling. |
+| `cli/` | Interactive REPL with slash commands, config TUI, and signal handling. |
 
 ## Security Model
 
@@ -131,6 +137,18 @@ See [security.md](security.md) for the complete threat analysis including:
 
 ## Configuration
 
+See [setup.md](setup.md) for the complete setup guide.
+
+### Quick Config
+
+```bash
+# Interactive wizard
+./hermes-go setup
+
+# Or from inside the chat
+/config
+```
+
 ### Environment Variables
 
 | Variable | Purpose | Default |
@@ -139,6 +157,8 @@ See [security.md](security.md) for the complete threat analysis including:
 | `HERMES_MAX_ITERATIONS` | Max conversation turns | 90 |
 | `ANTHROPIC_API_KEY` | Anthropic API key | (required) |
 | `OPENAI_API_KEY` | OpenAI API key | (required if using OpenAI) |
+| `AWS_ACCESS_KEY_ID` | AWS access key (Bedrock) | (from ~/.aws/credentials) |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (Bedrock) | (from ~/.aws/credentials) |
 | `API_SERVER_KEY` | API server bearer token | (required for API mode) |
 | `API_SERVER_ENABLED` | Enable API server | false |
 | `API_SERVER_PORT` | API server port | 8080 |
@@ -163,6 +183,9 @@ ANTHROPIC_API_KEY=sk-ant-... ./hermes-go chat
 # With OpenAI
 OPENAI_API_KEY=sk-... ./hermes-go chat
 
+# With AWS Bedrock (uses AWS credentials)
+./hermes-go chat
+
 # With profile
 ANTHROPIC_API_KEY=sk-ant-... ./hermes-go chat -p myprofile
 ```
@@ -172,7 +195,40 @@ ANTHROPIC_API_KEY=sk-ant-... ./hermes-go chat -p myprofile
 - `/help` — Show commands
 - `/session` — Show session ID
 - `/tools` — List available tools
+- `/models` — List Bedrock models with pricing
+- `/models use <n>` — Switch to Bedrock model #n
+- `/config` — Open configuration editor
 - `/clear` — Clear screen
+
+### Setup Wizard
+
+```bash
+# Run the interactive configuration wizard
+./hermes-go setup
+```
+
+The wizard displays all current settings and lets you edit each one. Changes are saved atomically to `~/.hermes/config.yaml`.
+
+### AWS Bedrock
+
+```bash
+# List available models with pricing
+/models
+
+# Switch to a model
+/models use 1        # Claude Sonnet 4
+/models use 14       # Nova Micro (free tier)
+```
+
+Bedrock uses your AWS credentials (from `~/.aws/credentials`, environment variables, or IAM roles). No API key needed. Configure the region via `/config` or `~/.hermes/config.yaml`:
+
+```yaml
+bedrock:
+  region: us-east-1
+  profile: ""
+```
+
+See [setup.md](setup.md) for the full model catalog with pricing.
 
 ### API Server
 
@@ -212,17 +268,24 @@ ANTHROPIC_API_KEY=sk-ant-... ./hermes-go chat -p work
 | `gopkg.in/yaml.v3` | YAML config parsing. Minimal, well-audited. |
 | `github.com/joho/godotenv` | `.env` file loading. Minimal, widely used. |
 | `github.com/google/uuid` | UUID generation for session IDs. |
+| `github.com/aws/aws-sdk-go-v2` | AWS SDK for Bedrock provider (config, credentials, bedrockruntime). |
 
 All other functionality uses the Go standard library.
 
 ## Building
 
 ```bash
-# Requires Go 1.22+ and CGO (for SQLite)
+# Using Make (recommended — includes vulnerability checks)
+make build
+
+# Manual build (requires Go 1.22+ and CGO for SQLite)
 go build -o hermes-go .
 
 # Static build (requires musl-gcc)
 CGO_ENABLED=1 go build -ldflags="-s -w" -o hermes-go .
+
+# Security audit before building
+make audit
 ```
 
 ## Deliberately Excluded Features
