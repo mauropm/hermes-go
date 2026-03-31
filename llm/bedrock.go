@@ -100,17 +100,19 @@ func (p *BedrockProvider) Chat(ctx context.Context, messages []Message, tools []
 				})
 			}
 			for _, tc := range msg.ToolCalls {
-				var argsDoc document.Interface
+				var inputMap map[string]interface{}
 				if tc.Function.Arguments != "" {
-					argsDoc = document.NewLazyDocument(json.RawMessage(tc.Function.Arguments))
+					if err := json.Unmarshal([]byte(tc.Function.Arguments), &inputMap); err != nil {
+						inputMap = map[string]interface{}{}
+					}
 				} else {
-					argsDoc = document.NewLazyDocument(map[string]interface{}{})
+					inputMap = map[string]interface{}{}
 				}
 				content = append(content, &types.ContentBlockMemberToolUse{
 					Value: types.ToolUseBlock{
 						ToolUseId: aws.String(tc.ID),
 						Name:      aws.String(tc.Function.Name),
-						Input:     argsDoc,
+						Input:     document.NewLazyDocument(inputMap),
 					},
 				})
 			}
