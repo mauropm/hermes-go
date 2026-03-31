@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nousresearch/hermes-go/api"
 	"github.com/nousresearch/hermes-go/cli"
 	"github.com/nousresearch/hermes-go/config"
@@ -18,17 +20,16 @@ import (
 	"github.com/nousresearch/hermes-go/memory"
 	"github.com/nousresearch/hermes-go/storage"
 	"github.com/nousresearch/hermes-go/tools"
-
-	"github.com/google/uuid"
 )
 
-const version = "0.5.0"
+const version = "0.6.0"
 
 func main() {
 	var (
-		profile string
-		cmd     string
-		showVer bool
+		profile  string
+		cmd      string
+		showVer  bool
+		thinking bool
 	)
 
 	flag.StringVar(&profile, "p", "", "Profile name")
@@ -36,6 +37,7 @@ func main() {
 	flag.StringVar(&cmd, "cmd", "", "Command to run (chat, api)")
 	flag.BoolVar(&showVer, "version", false, "Show version")
 	flag.BoolVar(&showVer, "v", false, "Show version")
+	flag.BoolVar(&thinking, "thinking", false, "Show model thinking/reasoning output")
 	flag.Parse()
 
 	if showVer {
@@ -67,7 +69,7 @@ func main() {
 
 	switch cmd {
 	case "chat":
-		runChat(cfg)
+		runChat(cfg, thinking)
 	case "api", "gateway":
 		runAPI(cfg)
 	case "setup":
@@ -76,12 +78,12 @@ func main() {
 		fmt.Printf("hermes-go %s\n", version)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
-		fmt.Fprintf(os.Stderr, "Usage: hermes-go [chat|api|setup] [-p profile]\n")
+		fmt.Fprintf(os.Stderr, "Usage: hermes-go [chat|api|setup] [-p profile] [-thinking]\n")
 		os.Exit(1)
 	}
 }
 
-func runChat(cfg *config.Config) {
+func runChat(cfg *config.Config, showThinking bool) {
 	sessionDB, err := storage.NewSessionDB(cfg.HomeDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize session database: %v", err)
@@ -129,6 +131,7 @@ func runChat(cfg *config.Config) {
 		MaxTurns:           cfg.Agent.MaxTurns,
 		SessionID:          sessionID,
 		Source:             "cli",
+		ShowThinking:       showThinking,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create agent: %v", err)

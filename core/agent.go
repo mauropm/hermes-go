@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,8 @@ type Agent struct {
 	validator        *security.InputValidator
 	bedrockAccessKey string
 	bedrockSecretKey string
+	showThinking     bool
+	rawResponse      string
 }
 
 type AgentConfig struct {
@@ -54,6 +57,7 @@ type AgentConfig struct {
 	MaxTurns           int
 	SessionID          string
 	Source             string
+	ShowThinking       bool
 }
 
 func NewAgent(cfg AgentConfig) (*Agent, error) {
@@ -89,6 +93,7 @@ func NewAgent(cfg AgentConfig) (*Agent, error) {
 		startedAt:        time.Now(),
 		bedrockAccessKey: cfg.BedrockAccessKey,
 		bedrockSecretKey: cfg.BedrockSecretKey,
+		showThinking:     cfg.ShowThinking,
 	}
 
 	a.messages = []llm.Message{
@@ -125,7 +130,54 @@ func (a *Agent) Chat(ctx context.Context, userInput string) (string, error) {
 		return "", fmt.Errorf("conversation loop: %w", err)
 	}
 
-	return response.Content, nil
+	return a.formatResponse(response.Content), nil
+}
+
+func (a *Agent) formatResponse(raw string) string {
+	if !a.showThinking {
+		return stripThinking(raw)
+	}
+	return raw
+}
+
+func stripThinking(raw string) string {
+	result := raw
+	for {
+		start := findTag(result, "<thinking>")
+		if start == -1 {
+			break
+		}
+		end := findClosingTag(result, start, "<thinking>", "</thinking>")
+		if end == -1 {
+			break
+		}
+		result = result[:start] + result[end:]
+	}
+	for {
+		start := findTag(result, "<response>")
+		if start == -1 {
+			break
+		}
+		end := findClosingTag(result, start, "<response>", "</response>")
+		if end == -1 {
+			break
+		}
+		inner := result[start+len("<response>") : end-len("</response>")]
+		result = result[:start] + inner + result[end:]
+	}
+	return strings.TrimSpace(result)
+}
+
+func findTag(s, tag string) int {
+	return strings.Index(s, tag)
+}
+
+func findClosingTag(s string, start int, openTag, closeTag string) int {
+	end := strings.Index(s[start+len(openTag):], closeTag)
+	if end == -1 {
+		return -1
+	}
+	return start + len(openTag) + end + len(closeTag)
 }
 
 func (a *Agent) runLoop(ctx context.Context) (*llm.Response, error) {
@@ -185,6 +237,7 @@ func (a *Agent) runLoop(ctx context.Context) (*llm.Response, error) {
 			Content: resp.Content,
 		})
 
+		a.rawResponse = resp.Content
 		lastResponse = resp
 
 		if resp.FinishReason == "stop" || resp.FinishReason == "end_turn" {
