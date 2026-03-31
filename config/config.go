@@ -79,10 +79,13 @@ type APIServerConfig struct {
 }
 
 type BedrockConfig struct {
-	Region          string `yaml:"region"`
-	Profile         string `yaml:"profile"`
-	AccessKeyID     string `yaml:"access_key_id,omitempty"`
-	SecretAccessKey string `yaml:"secret_access_key,omitempty"`
+	Region       string `yaml:"region"`
+	Profile      string `yaml:"profile"`
+	KeyAlias     string `yaml:"key_alias,omitempty"`
+	KeySecret    string `yaml:"key_secret,omitempty"`
+	CredentialID string `yaml:"credential_id,omitempty"`
+	IAMUser      string `yaml:"iam_user,omitempty"`
+	Expires      string `yaml:"expires,omitempty"`
 }
 
 var (
@@ -334,8 +337,8 @@ func (cfg *Config) GetAPIKey(provider string) string {
 func (cfg *Config) GetAWSAccessKeyID() string {
 	cfg.mu.RLock()
 	defer cfg.mu.RUnlock()
-	if cfg.Bedrock.AccessKeyID != "" {
-		return cfg.Bedrock.AccessKeyID
+	if cfg.Bedrock.KeyAlias != "" {
+		return cfg.Bedrock.KeyAlias
 	}
 	return cfg.APIKeys["AWS_ACCESS_KEY_ID"]
 }
@@ -343,8 +346,8 @@ func (cfg *Config) GetAWSAccessKeyID() string {
 func (cfg *Config) GetAWSSecretAccessKey() string {
 	cfg.mu.RLock()
 	defer cfg.mu.RUnlock()
-	if cfg.Bedrock.SecretAccessKey != "" {
-		return cfg.Bedrock.SecretAccessKey
+	if cfg.Bedrock.KeySecret != "" {
+		return cfg.Bedrock.KeySecret
 	}
 	return cfg.APIKeys["AWS_SECRET_ACCESS_KEY"]
 }

@@ -35,8 +35,8 @@ func (t *ConfigTUI) Run() error {
 		}
 
 		choice, err := strconv.Atoi(input)
-		if err != nil || choice < 0 || choice > 12 {
-			fmt.Println("Invalid choice. Enter a number 0-12.")
+		if err != nil || choice < 0 || choice > 15 {
+			fmt.Println("Invalid choice. Enter a number 0-15.")
 			continue
 		}
 
@@ -63,15 +63,18 @@ func (t *ConfigTUI) printMenu() {
 	fmt.Printf("║  5. Redact PII     │ %-29t ║\n", t.cfg.Privacy.RedactPII)
 	fmt.Printf("║  6. Bedrock Region │ %-29s ║\n", t.cfg.Bedrock.Region)
 	fmt.Printf("║  7. Bedrock Profile│ %-29s ║\n", t.cfg.Bedrock.Profile)
-	fmt.Printf("║  8. AWS Access Key │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.AccessKeyID))
-	fmt.Printf("║  9. AWS Secret Key │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.SecretAccessKey))
-	fmt.Printf("║ 10. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
-	fmt.Printf("║ 11. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
-	fmt.Printf("║ 12. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
+	fmt.Printf("║  8. Key Alias      │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.KeyAlias))
+	fmt.Printf("║  9. Key Secret     │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.KeySecret))
+	fmt.Printf("║ 10. Credential ID  │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.CredentialID))
+	fmt.Printf("║ 11. IAM User       │ %-29s ║\n", t.cfg.Bedrock.IAMUser)
+	fmt.Printf("║ 12. Expires        │ %-29s ║\n", t.cfg.Bedrock.Expires)
+	fmt.Printf("║ 13. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
+	fmt.Printf("║ 14. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
+	fmt.Printf("║ 15. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
 	fmt.Println("╠══════════════════════════════════════════╣")
 	fmt.Println("║  0. Save & Exit                          ║")
 	fmt.Println("╚══════════════════════════════════════════╝")
-	fmt.Print("\nSelect option (0-12): ")
+	fmt.Print("\nSelect option (0-15): ")
 }
 
 func (t *ConfigTUI) maskedKey(key string) string {
@@ -171,7 +174,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 		t.cfg.SetBedrockProfile(val)
 
 	case 8:
-		fmt.Print("AWS Access Key ID: ")
+		fmt.Print("Bedrock Key Alias: ")
 		if !t.scanner.Scan() {
 			return false, nil
 		}
@@ -181,7 +184,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 		}
 
 	case 9:
-		fmt.Print("AWS Secret Access Key: ")
+		fmt.Print("Bedrock Key Secret: ")
 		if !t.scanner.Scan() {
 			return false, nil
 		}
@@ -191,6 +194,32 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 		}
 
 	case 10:
+		fmt.Print("Bedrock Credential ID: ")
+		if !t.scanner.Scan() {
+			return false, nil
+		}
+		val := strings.TrimSpace(t.scanner.Text())
+		if val != "" {
+			t.cfg.SetBedrockCredentialID(val)
+		}
+
+	case 11:
+		fmt.Print("Bedrock IAM User: ")
+		if !t.scanner.Scan() {
+			return false, nil
+		}
+		val := strings.TrimSpace(t.scanner.Text())
+		t.cfg.SetBedrockIAMUser(val)
+
+	case 12:
+		fmt.Print("Bedrock Expires (e.g., 2026-12-31): ")
+		if !t.scanner.Scan() {
+			return false, nil
+		}
+		val := strings.TrimSpace(t.scanner.Text())
+		t.cfg.SetBedrockExpires(val)
+
+	case 13:
 		fmt.Print("API server host (current: " + t.cfg.APIServer.Host + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -200,7 +229,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			t.cfg.SetAPIHost(val)
 		}
 
-	case 11:
+	case 14:
 		fmt.Print("API server port (current: " + strconv.Itoa(t.cfg.APIServer.Port) + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -212,7 +241,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			fmt.Println("Invalid port. Must be 1-65535.")
 		}
 
-	case 12:
+	case 15:
 		fmt.Printf("Require API key for API server? (current: %t) [y/n]: ", t.cfg.APIServer.Key != "")
 		if !t.scanner.Scan() {
 			return false, nil
