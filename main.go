@@ -1,0 +1,198 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/nousresearch/hermes-go/api"
+	"github.com/nousresearch/hermes-go/cli"
+	"github.com/nousresearch/hermes-go/config"
+	"github.com/nousresearch/hermes-go/core"
+	"github.com/nousresearch/hermes-go/memory"
+	"github.com/nousresearch/hermes-go/storage"
+	"github.com/nousresearch/hermes-go/tools"
+
+	"github.com/google/uuid"
+)
+
+const version = "0.1.0"
+
+func main() {
+	var (
+		profile string
+		cmd     string
+		showVer bool
+	)
+
+	flag.StringVar(&profile, "p", "", "Profile name")
+	flag.StringVar(&profile, "profile", "", "Profile name")
+	flag.StringVar(&cmd, "cmd", "", "Command to run (chat, api)")
+	flag.BoolVar(&showVer, "version", false, "Show version")
+	flag.BoolVar(&showVer, "v", false, "Show version")
+	flag.Parse()
+
+	if showVer {
+		fmt.Printf("hermes-go %s\n", version)
+		os.Exit(0)
+	}
+
+	if cmd == "" {
+		args := flag.Args()
+		if len(args) > 0 {
+			cmd = args[0]
+		} else {
+			cmd = "chat"
+		}
+	}
+
+	cfg, err := config.Load(profile)
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	if err := cfg.EnsureDirs(); err != nil {
+		log.Fatalf("Failed to create directories: %v", err)
+	}
+
+	log.SetOutput(os.Stderr)
+	log.SetPrefix("[hermes] ")
+	log.SetFlags(log.Ldate | log.Ltime)
+
+	switch cmd {
+	case "chat":
+		runChat(cfg)
+	case "api", "gateway":
+		runAPI(cfg)
+	case "version":
+		fmt.Printf("hermes-go %s\n", version)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
+		fmt.Fprintf(os.Stderr, "Usage: hermes-go [chat|api] [-p profile]\n")
+		os.Exit(1)
+	}
+}
+
+func runChat(cfg *config.Config) {
+	sessionDB, err := storage.NewSessionDB(cfg.HomeDir)
+	if err != nil {
+		log.Fatalf("Failed to initialize session database: %v", err)
+	}
+	defer sessionDB.Close()
+
+	toolRegistry := tools.NewRegistry()
+	if err := tools.RegisterBuiltinTools(toolRegistry); err != nil {
+		log.Fatalf("Failed to register tools: %v", err)
+	}
+
+	sessionID := uuid.New().String()
+
+	var memStore *memory.Store
+	if cfg.Memory.Enabled {
+		memStore, err = memory.NewStore(cfg.HomeDir, 30*24*time.Hour)
+		if err != nil {
+			log.Printf("Warning: failed to initialize memory store: %v", err)
+		}
+	}
+
+	apiKey := cfg.GetAPIKey(cfg.Provider)
+	if apiKey == "" {
+		log.Fatalf("No API key found for provider %q. Set the appropriate environment variable (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY).", cfg.Provider)
+	}
+
+	agent, err := core.NewAgent(core.AgentConfig{
+		Model:        cfg.Model,
+		Provider:     cfg.Provider,
+		APIKey:       apiKey,
+		ToolRegistry: toolRegistry,
+		SessionDB:    sessionDB,
+		MemStore:     memStore,
+		MaxTurns:     cfg.Agent.MaxTurns,
+		SessionID:    sessionID,
+		Source:       "cli",
+	})
+	if err != nil {
+		log.Fatalf("Failed to create agent: %v", err)
+	}
+
+	if err := sessionDB.CreateSession(sessionID, "cli", "", cfg.Model, "", core.BuildSystemPrompt("")); err != nil {
+		log.Printf("Warning: failed to create session record: %v", err)
+	}
+
+	c := cli.NewCLI(agent)
+
+	if err := c.Run(); err != nil {
+		log.Printf("Session ended: %v", err)
+	}
+
+	if err := agent.SaveSession(); err != nil {
+		log.Printf("Warning: failed to save session: %v", err)
+	}
+
+	if err := sessionDB.EndSession(sessionID, "user_exit"); err != nil {
+		log.Printf("Warning: failed to end session: %v", err)
+	}
+}
+
+func runAPI(cfg *config.Config) {
+	sessionDB, err := storage.NewSessionDB(cfg.HomeDir)
+	if err != nil {
+		log.Fatalf("Failed to initialize session database: %v", err)
+	}
+	defer sessionDB.Close()
+
+	toolRegistry := tools.NewRegistry()
+	if err := tools.RegisterBuiltinTools(toolRegistry); err != nil {
+		log.Fatalf("Failed to register tools: %v", err)
+	}
+
+	sessionID := uuid.New().String()
+
+	apiKey := cfg.GetAPIKey(cfg.Provider)
+	if apiKey == "" {
+		log.Fatalf("No API key found for provider %q. Set the appropriate environment variable.", cfg.Provider)
+	}
+
+	agent, err := core.NewAgent(core.AgentConfig{
+		Model:        cfg.Model,
+		Provider:     cfg.Provider,
+		APIKey:       apiKey,
+		ToolRegistry: toolRegistry,
+		SessionDB:    sessionDB,
+		MaxTurns:     cfg.Agent.MaxTurns,
+		SessionID:    sessionID,
+		Source:       "api",
+	})
+	if err != nil {
+		log.Fatalf("Failed to create agent: %v", err)
+	}
+
+	srv := api.NewServer(agent, cfg.APIServer.Key, cfg.APIServer.Host, cfg.APIServer.Port)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		log.Printf("API server starting on %s:%d", cfg.APIServer.Host, cfg.APIServer.Port)
+		if err := srv.Start(); err != nil && err.Error() != "http: Server closed" {
+			log.Fatalf("API server error: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("Shutting down API server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	log.Println("Server stopped.")
+}
