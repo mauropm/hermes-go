@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -59,14 +60,21 @@ func (c *CLI) Run() error {
 	fmt.Println("Use Up/Down arrows to navigate command history.")
 	fmt.Println()
 
-	// Save and restore terminal state
-	if term.IsTerminal(int(os.Stdin.Fd())) {
+	isTerminal := term.IsTerminal(int(os.Stdin.Fd()))
+
+	// Save and restore terminal state only if stdin is a terminal
+	if isTerminal {
 		var err error
 		c.oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
 			return fmt.Errorf("failed to set terminal to raw mode: %w", err)
 		}
 		defer term.Restore(int(os.Stdin.Fd()), c.oldState)
+	}
+
+	// For non-terminal input, use buffered reading
+	if !isTerminal {
+		return c.runNonTerminal(ctx)
 	}
 
 	currentInput := ""
@@ -79,12 +87,17 @@ func (c *CLI) Run() error {
 		default:
 		}
 
-		// Print prompt and current input
-		fmt.Print("\r" + promptText + currentInput)
-		fmt.Print("\033[K") // Clear to end of line
-		if cursorPos < len(currentInput) {
-			// Move cursor back to correct position
-			fmt.Printf("\033[%dG", len(promptText)+cursorPos+1)
+		// Print prompt and current input (only in terminal mode)
+		if isTerminal {
+			fmt.Print("\r" + promptText + currentInput)
+			fmt.Print("\033[K") // Clear to end of line
+			if cursorPos < len(currentInput) {
+				// Move cursor back to correct position
+				fmt.Printf("\033[%dG", len(promptText)+cursorPos+1)
+			}
+		} else {
+			// Non-terminal mode: just print prompt
+			fmt.Print(promptText)
 		}
 
 		// Read single character (handle EINTR)
@@ -108,8 +121,8 @@ func (c *CLI) Run() error {
 
 		ch := b[0]
 
-		// Handle escape sequences (arrow keys)
-		if ch == 27 { // ESC
+		// Handle escape sequences (arrow keys) - only in terminal mode
+		if ch == 27 && isTerminal { // ESC
 			// Read next characters for escape sequence
 			seq := make([]byte, 2)
 			os.Stdin.Read(seq)
@@ -181,8 +194,16 @@ func (c *CLI) Run() error {
 			c.historyIndex = -1
 
 			if strings.HasPrefix(input, "/") {
+				// Restore terminal mode for command output
+				if isTerminal {
+					term.Restore(int(os.Stdin.Fd()), c.oldState)
+				}
 				if err := c.handleCommand(ctx, input); err != nil {
 					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				}
+				// Re-enter raw mode
+				if term.IsTerminal(int(os.Stdin.Fd())) {
+					c.oldState, _ = term.MakeRaw(int(os.Stdin.Fd()))
 				}
 				currentInput = ""
 				cursorPos = 0
@@ -190,7 +211,15 @@ func (c *CLI) Run() error {
 			}
 
 			if err := security.ValidateLength(input, security.MaxInputLength); err != nil {
+				// Restore terminal mode for error output
+				if isTerminal {
+					term.Restore(int(os.Stdin.Fd()), c.oldState)
+				}
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				// Re-enter raw mode
+				if term.IsTerminal(int(os.Stdin.Fd())) {
+					c.oldState, _ = term.MakeRaw(int(os.Stdin.Fd()))
+				}
 				currentInput = ""
 				cursorPos = 0
 				continue
@@ -199,20 +228,44 @@ func (c *CLI) Run() error {
 			response, err := c.agent.Chat(ctx, input)
 			if err != nil {
 				if err == context.Canceled {
+					// Restore terminal mode for output
+					if isTerminal {
+						term.Restore(int(os.Stdin.Fd()), c.oldState)
+					}
 					fmt.Println("\nCancelled.")
+					// Re-enter raw mode
+					if term.IsTerminal(int(os.Stdin.Fd())) {
+						c.oldState, _ = term.MakeRaw(int(os.Stdin.Fd()))
+					}
 					currentInput = ""
 					cursorPos = 0
 					continue
 				}
+				// Restore terminal mode for error output
+				if isTerminal {
+					term.Restore(int(os.Stdin.Fd()), c.oldState)
+				}
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				// Re-enter raw mode
+				if term.IsTerminal(int(os.Stdin.Fd())) {
+					c.oldState, _ = term.MakeRaw(int(os.Stdin.Fd()))
+				}
 				currentInput = ""
 				cursorPos = 0
 				continue
 			}
 
+			// Temporarily restore terminal mode for clean output
+			if isTerminal {
+				term.Restore(int(os.Stdin.Fd()), c.oldState)
+			}
 			fmt.Println()
 			fmt.Println(response)
 			fmt.Println()
+			// Re-enter raw mode
+			if term.IsTerminal(int(os.Stdin.Fd())) {
+				c.oldState, _ = term.MakeRaw(int(os.Stdin.Fd()))
+			}
 
 			currentInput = ""
 			cursorPos = 0
@@ -224,8 +277,16 @@ func (c *CLI) Run() error {
 			}
 
 		case 3: // Ctrl+C
+			// Restore terminal mode for output
+			if isTerminal {
+				term.Restore(int(os.Stdin.Fd()), c.oldState)
+			}
 			fmt.Println("^C")
 			c.agent.Interrupt()
+			// Re-enter raw mode
+			if term.IsTerminal(int(os.Stdin.Fd())) {
+				c.oldState, _ = term.MakeRaw(int(os.Stdin.Fd()))
+			}
 			currentInput = ""
 			cursorPos = 0
 
@@ -437,4 +498,68 @@ func (c *CLI) testLLM() {
 	fmt.Println()
 	fmt.Println(response)
 	fmt.Println()
+}
+
+// runNonTerminal handles input when stdin is not a terminal (piped input)
+func (c *CLI) runNonTerminal(ctx context.Context) error {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		fmt.Print(promptText)
+		if !scanner.Scan() {
+			break
+		}
+
+		input := strings.TrimSpace(scanner.Text())
+
+		if input == "" {
+			continue
+		}
+
+		// Add to history
+		if len(c.history) == 0 || c.history[len(c.history)-1] != input {
+			c.history = append(c.history, input)
+			maxHistory := c.cfg.Terminal.ChatHistoryLen
+			if maxHistory <= 0 {
+				maxHistory = config.DefaultChatHistoryLen
+			}
+			if len(c.history) > maxHistory {
+				c.history = c.history[len(c.history)-maxHistory:]
+			}
+		}
+
+		if strings.HasPrefix(input, "/") {
+			if err := c.handleCommand(ctx, input); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			}
+			continue
+		}
+
+		if err := security.ValidateLength(input, security.MaxInputLength); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			continue
+		}
+
+		response, err := c.agent.Chat(ctx, input)
+		if err != nil {
+			if err == context.Canceled {
+				fmt.Println("\nCancelled.")
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			continue
+		}
+
+		fmt.Println()
+		fmt.Println(response)
+		fmt.Println()
+	}
+
+	return scanner.Err()
 }
