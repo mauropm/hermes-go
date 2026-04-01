@@ -62,6 +62,9 @@ type ProviderConfig struct {
 	BedrockBearerToken string
 	BedrockAccessKey   string
 	BedrockSecretKey   string
+	// Ollama-specific fields
+	OllamaBaseURL string
+	OllamaModel   string
 }
 
 func NewProvider(cfg ProviderConfig) (Provider, error) {
@@ -76,6 +79,12 @@ func NewProvider(cfg ProviderConfig) (Provider, error) {
 		return NewAnthropicProvider(cfg)
 	case "bedrock":
 		return NewBedrockProvider(cfg.BedrockRegion, cfg.BedrockProfile, cfg.BedrockBearerToken, cfg.BedrockAccessKey, cfg.BedrockSecretKey, cfg.Timeout)
+	case "ollama":
+		return NewOllamaProvider(OllamaConfig{
+			BaseURL: cfg.OllamaBaseURL,
+			Model:   cfg.OllamaModel,
+			Timeout: cfg.Timeout,
+		})
 	default:
 		return NewOpenAICompatibleProvider(cfg)
 	}
@@ -88,6 +97,9 @@ func DetectProvider(model string) string {
 	}
 	if strings.Contains(lower, "bedrock") || strings.Contains(lower, "amazon") || strings.Contains(lower, "llama") || strings.Contains(lower, "mistral") || strings.Contains(lower, "cohere") || strings.Contains(lower, "ai21") || strings.Contains(lower, "deepseek") {
 		return "bedrock"
+	}
+	if strings.HasPrefix(lower, "ollama/") || strings.HasPrefix(lower, "ollama:") {
+		return "ollama"
 	}
 	return "openai"
 }

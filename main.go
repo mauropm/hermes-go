@@ -26,10 +26,14 @@ const version = "0.6.0"
 
 func main() {
 	var (
-		profile  string
-		cmd      string
-		showVer  bool
-		thinking bool
+		profile      string
+		cmd          string
+		showVer      bool
+		thinking     bool
+		provider     string
+		ollamaURL    string
+		ollamaModel  string
+		ollamaTimeout int
 	)
 
 	flag.StringVar(&profile, "p", "", "Profile name")
@@ -38,6 +42,10 @@ func main() {
 	flag.BoolVar(&showVer, "version", false, "Show version")
 	flag.BoolVar(&showVer, "v", false, "Show version")
 	flag.BoolVar(&thinking, "thinking", false, "Show model thinking/reasoning output")
+	flag.StringVar(&provider, "provider", "", "LLM provider (openai, anthropic, bedrock, ollama)")
+	flag.StringVar(&ollamaURL, "ollama-url", "", "Ollama base URL (e.g., http://localhost:11434)")
+	flag.StringVar(&ollamaModel, "ollama-model", "", "Ollama model name (e.g., llama3, mistral)")
+	flag.IntVar(&ollamaTimeout, "ollama-timeout", 120, "Ollama request timeout in seconds")
 	flag.Parse()
 
 	if showVer {
@@ -69,7 +77,7 @@ func main() {
 
 	switch cmd {
 	case "chat":
-		runChat(cfg, thinking)
+		runChat(cfg, thinking, provider, ollamaURL, ollamaModel, ollamaTimeout)
 	case "api", "gateway":
 		runAPI(cfg)
 	case "setup":
@@ -78,12 +86,27 @@ func main() {
 		fmt.Printf("hermes-go %s\n", version)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", cmd)
-		fmt.Fprintf(os.Stderr, "Usage: hermes-go [chat|api|setup] [-p profile] [-thinking]\n")
+		fmt.Fprintf(os.Stderr, "Usage: hermes-go [chat|api|setup] [-p profile] [-thinking] [--provider ollama] [--ollama-url URL] [--ollama-model MODEL]\n")
 		os.Exit(1)
 	}
 }
 
-func runChat(cfg *config.Config, showThinking bool) {
+func runChat(cfg *config.Config, showThinking bool, providerFlag, ollamaURL, ollamaModel string, ollamaTimeout int) {
+	// Apply CLI overrides for Ollama
+	if providerFlag == "ollama" {
+		cfg.Provider = "ollama"
+		if ollamaURL != "" {
+			cfg.Ollama.BaseURL = ollamaURL
+		}
+		if ollamaModel != "" {
+			cfg.Ollama.Model = ollamaModel
+			cfg.Model = "ollama/" + ollamaModel
+		}
+		cfg.Ollama.Timeout = time.Duration(ollamaTimeout) * time.Second
+	} else if providerFlag != "" {
+		cfg.Provider = providerFlag
+	}
+
 	sessionDB, err := storage.NewSessionDB(cfg.HomeDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize session database: %v", err)
@@ -111,7 +134,7 @@ func runChat(cfg *config.Config, showThinking bool) {
 	}
 
 	var apiKey string
-	if provider != "bedrock" {
+	if provider != "bedrock" && provider != "ollama" {
 		apiKey = cfg.GetAPIKey(provider)
 		if apiKey == "" {
 			log.Fatalf("No API key found for provider %q. Set the appropriate environment variable (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY).", provider)
@@ -125,6 +148,9 @@ func runChat(cfg *config.Config, showThinking bool) {
 		BedrockBearerToken: cfg.GetBedrockBearerToken(),
 		BedrockAccessKey:   cfg.GetAWSAccessKeyID(),
 		BedrockSecretKey:   cfg.GetAWSSecretAccessKey(),
+		OllamaBaseURL:      cfg.Ollama.BaseURL,
+		OllamaModel:        cfg.Ollama.Model,
+		OllamaTimeout:      cfg.Ollama.Timeout,
 		ToolRegistry:       toolRegistry,
 		SessionDB:          sessionDB,
 		MemStore:           memStore,
@@ -176,7 +202,7 @@ func runAPI(cfg *config.Config) {
 	}
 
 	var apiKey string
-	if provider != "bedrock" {
+	if provider != "bedrock" && provider != "ollama" {
 		apiKey = cfg.GetAPIKey(provider)
 		if apiKey == "" {
 			log.Fatalf("No API key found for provider %q. Set the appropriate environment variable.", provider)
@@ -190,6 +216,9 @@ func runAPI(cfg *config.Config) {
 		BedrockBearerToken: cfg.GetBedrockBearerToken(),
 		BedrockAccessKey:   cfg.GetAWSAccessKeyID(),
 		BedrockSecretKey:   cfg.GetAWSSecretAccessKey(),
+		OllamaBaseURL:      cfg.Ollama.BaseURL,
+		OllamaModel:        cfg.Ollama.Model,
+		OllamaTimeout:      cfg.Ollama.Timeout,
 		ToolRegistry:       toolRegistry,
 		SessionDB:          sessionDB,
 		MaxTurns:           cfg.Agent.MaxTurns,

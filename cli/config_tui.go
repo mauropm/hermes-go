@@ -2,10 +2,12 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nousresearch/hermes-go/config"
 	"github.com/nousresearch/hermes-go/llm"
@@ -35,8 +37,8 @@ func (t *ConfigTUI) Run() error {
 		}
 
 		choice, err := strconv.Atoi(input)
-		if err != nil || choice < 0 || choice > 11 {
-			fmt.Println("Invalid choice. Enter a number 0-11.")
+		if err != nil || choice < 0 || choice > 13 {
+			fmt.Println("Invalid choice. Enter a number 0-13.")
 			continue
 		}
 
@@ -64,13 +66,15 @@ func (t *ConfigTUI) printMenu() {
 	fmt.Printf("║  6. Bedrock Region │ %-29s ║\n", t.cfg.Bedrock.Region)
 	fmt.Printf("║  7. Bedrock Profile│ %-29s ║\n", t.cfg.Bedrock.Profile)
 	fmt.Printf("║  8. Bearer Token   │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.BearerToken))
-	fmt.Printf("║  9. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
-	fmt.Printf("║ 10. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
-	fmt.Printf("║ 11. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
+	fmt.Printf("║  9. Ollama URL     │ %-29s ║\n", t.cfg.Ollama.BaseURL)
+	fmt.Printf("║ 10. Ollama Model   │ %-29s ║\n", t.cfg.Ollama.Model)
+	fmt.Printf("║ 11. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
+	fmt.Printf("║ 12. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
+	fmt.Printf("║ 13. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
 	fmt.Println("╠══════════════════════════════════════════╣")
 	fmt.Println("║  0. Save & Exit                          ║")
 	fmt.Println("╚══════════════════════════════════════════╝")
-	fmt.Print("\nSelect option (0-11): ")
+	fmt.Print("\nSelect option (0-13): ")
 }
 
 func (t *ConfigTUI) maskedKey(key string) string {
@@ -180,6 +184,19 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 		}
 
 	case 9:
+		t.configureOllama()
+
+	case 10:
+		fmt.Print("Ollama model name (e.g., llama3, mistral, codellama): ")
+		if !t.scanner.Scan() {
+			return false, nil
+		}
+		val := strings.TrimSpace(t.scanner.Text())
+		if val != "" {
+			t.cfg.SetOllamaModel(val)
+		}
+
+	case 11:
 		fmt.Print("API server host (current: " + t.cfg.APIServer.Host + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -189,7 +206,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			t.cfg.SetAPIHost(val)
 		}
 
-	case 10:
+	case 12:
 		fmt.Print("API server port (current: " + strconv.Itoa(t.cfg.APIServer.Port) + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -201,7 +218,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			fmt.Println("Invalid port. Must be 1-65535.")
 		}
 
-	case 11:
+	case 13:
 		fmt.Printf("Require API key for API server? (current: %t) [y/n]: ", t.cfg.APIServer.Key != "")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -223,8 +240,9 @@ func (t *ConfigTUI) selectModel() {
 	fmt.Println("  1. AWS Bedrock  (uses AWS credentials)")
 	fmt.Println("  2. Anthropic    (direct API)")
 	fmt.Println("  3. OpenAI       (direct API)")
-	fmt.Println("  4. Custom       (manual model ID)")
-	fmt.Print("\nChoice (1-4): ")
+	fmt.Println("  4. Ollama       (local or remote)")
+	fmt.Println("  5. Custom       (manual model ID)")
+	fmt.Print("\nChoice (1-5): ")
 	if !t.scanner.Scan() {
 		return
 	}
@@ -240,6 +258,8 @@ func (t *ConfigTUI) selectModel() {
 		t.cfg.SetModel("openai/gpt-4o")
 		fmt.Println("Set to: openai/gpt-4o")
 	case "4":
+		t.selectOllamaModel()
+	case "5":
 		fmt.Print("Enter model ID (e.g., anthropic/claude-sonnet-4-20250514): ")
 		if !t.scanner.Scan() {
 			return
@@ -305,4 +325,148 @@ func (t *ConfigTUI) selectBedrockModel() {
 	fmt.Printf("  Input:    $%.2f/M tokens\n", m.InputCost)
 	fmt.Printf("  Output:   $%.2f/M tokens\n", m.OutputCost)
 	fmt.Printf("  Context:  %d tokens\n", m.ContextLen)
+}
+
+// selectOllamaModel allows the user to configure Ollama settings.
+func (t *ConfigTUI) selectOllamaModel() {
+	fmt.Println()
+	fmt.Println("Ollama Configuration")
+	fmt.Println(strings.Repeat("-", 50))
+	fmt.Printf("Current URL:   %s\n", t.cfg.Ollama.BaseURL)
+	fmt.Printf("Current Model: %s\n", t.cfg.Ollama.Model)
+	fmt.Println()
+
+	// Prompt for URL
+	fmt.Print("Ollama Base URL (default: http://localhost:11434): ")
+	if !t.scanner.Scan() {
+		return
+	}
+	url := strings.TrimSpace(t.scanner.Text())
+	if url == "" {
+		url = "http://localhost:11434"
+	}
+	t.cfg.SetOllamaBaseURL(url)
+
+	// Prompt for model
+	fmt.Print("Ollama Model (e.g., llama3, mistral, codellama): ")
+	if !t.scanner.Scan() {
+		return
+	}
+	model := strings.TrimSpace(t.scanner.Text())
+	if model == "" {
+		model = "llama3"
+	}
+	t.cfg.SetOllamaModel(model)
+
+	// Set the main model to ollama/model
+	t.cfg.SetModel("ollama/" + model)
+
+	fmt.Printf("\nConfigured Ollama: %s\n", url)
+	fmt.Printf("  Model: %s\n", model)
+	fmt.Printf("  Full model ID: ollama/%s\n", model)
+
+	// Offer to test connection
+	fmt.Print("\nTest connection to Ollama? [y/n]: ")
+	if !t.scanner.Scan() {
+		return
+	}
+	val := strings.TrimSpace(strings.ToLower(t.scanner.Text()))
+	if val == "y" || val == "yes" {
+		t.testOllamaConnection()
+	}
+}
+
+// configureOllama allows quick configuration of Ollama URL and model.
+func (t *ConfigTUI) configureOllama() {
+	fmt.Println()
+	fmt.Println("Ollama Quick Configuration")
+	fmt.Println(strings.Repeat("-", 50))
+	fmt.Printf("Current URL:   %s\n", t.cfg.Ollama.BaseURL)
+	fmt.Printf("Current Model: %s\n", t.cfg.Ollama.Model)
+	fmt.Println()
+
+	fmt.Print("Enter new Base URL (or press Enter to keep current): ")
+	if !t.scanner.Scan() {
+		return
+	}
+	url := strings.TrimSpace(t.scanner.Text())
+	if url != "" {
+		t.cfg.SetOllamaBaseURL(url)
+	}
+
+	fmt.Print("Enter new Model name (or press Enter to keep current): ")
+	if !t.scanner.Scan() {
+		return
+	}
+	model := strings.TrimSpace(t.scanner.Text())
+	if model != "" {
+		t.cfg.SetOllamaModel(model)
+		t.cfg.SetModel("ollama/" + model)
+	}
+
+	fmt.Println("\nOllama configuration updated.")
+	fmt.Printf("  URL:   %s\n", t.cfg.Ollama.BaseURL)
+	fmt.Printf("  Model: %s\n", t.cfg.Ollama.Model)
+
+	// Offer to test connection
+	fmt.Print("\nTest connection to Ollama? [y/n]: ")
+	if !t.scanner.Scan() {
+		return
+	}
+	val := strings.TrimSpace(strings.ToLower(t.scanner.Text()))
+	if val == "y" || val == "yes" {
+		t.testOllamaConnection()
+	}
+}
+
+// testOllamaConnection attempts to ping the Ollama instance.
+func (t *ConfigTUI) testOllamaConnection() {
+	fmt.Println("\nTesting Ollama connection...")
+
+	// Create a temporary provider to test
+	ollamaCfg := llm.OllamaConfig{
+		BaseURL: t.cfg.Ollama.BaseURL,
+		Model:   t.cfg.Ollama.Model,
+		Timeout: 10 * time.Second,
+	}
+	provider, err := llm.NewOllamaProvider(ollamaCfg)
+	if err != nil {
+		fmt.Printf("Failed to create Ollama provider: %v\n", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := provider.Ping(ctx); err != nil {
+		fmt.Printf("Connection FAILED: %v\n", err)
+		fmt.Println("\nTroubleshooting tips:")
+		fmt.Println("  - Ensure Ollama is running: ollama serve")
+		fmt.Println("  - Check the base URL is correct")
+		fmt.Println("  - Verify firewall settings allow connections")
+		return
+	}
+
+	fmt.Println("Connection SUCCESSFUL!")
+
+	// Try to list available models
+	fmt.Println("\nFetching available models...")
+	models, err := provider.ListModels(ctx)
+	if err != nil {
+		fmt.Printf("Warning: could not list models: %v\n", err)
+		return
+	}
+
+	if len(models) == 0 {
+		fmt.Println("No models found. Pull a model with: ollama pull llama3")
+	} else {
+		fmt.Printf("Found %d model(s):\n", len(models))
+		for _, m := range models {
+			marker := ""
+			if m == t.cfg.Ollama.Model {
+				marker = " (selected)"
+			}
+			fmt.Printf("  - %s%s\n", m, marker)
+		}
+	}
 }

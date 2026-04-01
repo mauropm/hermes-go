@@ -42,6 +42,7 @@ type Config struct {
 	Privacy   PrivacyConfig   `yaml:"privacy"`
 	APIServer APIServerConfig `yaml:"api_server"`
 	Bedrock   BedrockConfig   `yaml:"bedrock"`
+	Ollama    OllamaConfig    `yaml:"ollama"`
 
 	APIKeys map[string]string `yaml:"-"`
 }
@@ -84,6 +85,12 @@ type BedrockConfig struct {
 	BearerToken     string `yaml:"bearer_token,omitempty"`
 	AccessKeyID     string `yaml:"access_key_id,omitempty"`
 	SecretAccessKey string `yaml:"secret_access_key,omitempty"`
+}
+
+type OllamaConfig struct {
+	BaseURL string        `yaml:"base_url"`
+	Model   string        `yaml:"model"`
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 var (
@@ -160,6 +167,11 @@ func defaultConfig(homeDir string) *Config {
 		Bedrock: BedrockConfig{
 			Region:  "us-east-1",
 			Profile: "",
+		},
+		Ollama: OllamaConfig{
+			BaseURL: "http://localhost:11434",
+			Model:   "llama3",
+			Timeout: 120 * time.Second,
 		},
 		APIKeys: make(map[string]string),
 	}

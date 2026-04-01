@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -123,4 +124,22 @@ func (cfg *Config) SetBedrockBearerToken(token string) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 	cfg.Bedrock.BearerToken = token
+}
+
+func (cfg *Config) SetOllamaBaseURL(url string) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.Ollama.BaseURL = url
+}
+
+func (cfg *Config) SetOllamaModel(model string) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.Ollama.Model = model
+}
+
+func (cfg *Config) SetOllamaTimeout(timeout time.Duration) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.Ollama.Timeout = timeout
 }
