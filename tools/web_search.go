@@ -30,7 +30,7 @@ type SearchResult struct {
 func RegisterWebSearchTool(registry *Registry) error {
 	return registry.Register(&Tool{
 		Name:        "web_search",
-		Description: "Search the web for current information. Use this tool when the user asks to search, look up, or find information about any topic, person, place, or event. Always extract the core search terms from the user's request.",
+		Description: "Search the web for current information. When the user asks to search, look up, find something, or asks a question about a topic they want you to look up (like 'search for X', 'what is Y', 'find information about Z'), extract the key search terms from their request and use this tool immediately. Do NOT ask the user for clarification - just call the tool with the extracted query. Supports searching for topics, people, places, events, definitions, news, and other factual information.",
 		Schema: DefaultSchema("web_search", "Search the web for information", map[string]interface{}{
 			"query": map[string]interface{}{
 				"type":        "string",
