@@ -14,13 +14,14 @@ import (
 )
 
 const (
-	DefaultHomeDirName = ".hermes"
-	DefaultMaxTurns    = 90
-	DefaultTimeout     = 60 * time.Second
-	DefaultMaxInputLen = 100_000
-	DefaultMaxRespLen  = 64 * 1024
-	DefaultAPIPort     = 8080
-	DefaultAPIHost     = "127.0.0.1"
+	DefaultHomeDirName    = ".hermes"
+	DefaultMaxTurns       = 90
+	DefaultTimeout        = 60 * time.Second
+	DefaultMaxInputLen    = 100_000
+	DefaultMaxRespLen     = 64 * 1024
+	DefaultAPIPort        = 8080
+	DefaultAPIHost        = "127.0.0.1"
+	DefaultChatHistoryLen = 200
 )
 
 type Config struct {
@@ -53,8 +54,9 @@ type AgentConfig struct {
 }
 
 type TerminalConfig struct {
-	Backend string        `yaml:"backend"`
-	Timeout time.Duration `yaml:"timeout"`
+	Backend       string        `yaml:"backend"`
+	Timeout       time.Duration `yaml:"timeout"`
+	ChatHistoryLen int          `yaml:"chat_history_len"`
 }
 
 type MemoryConfig struct {
@@ -144,8 +146,9 @@ func defaultConfig(homeDir string) *Config {
 			ToolUseMode: "auto",
 		},
 		Terminal: TerminalConfig{
-			Backend: "local",
-			Timeout: DefaultTimeout,
+			Backend:        "local",
+			Timeout:        DefaultTimeout,
+			ChatHistoryLen: DefaultChatHistoryLen,
 		},
 		Memory: MemoryConfig{
 			Enabled:       false,

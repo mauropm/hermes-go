@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -15,6 +14,8 @@ import (
 	"github.com/nousresearch/hermes-go/core"
 	"github.com/nousresearch/hermes-go/llm"
 	"github.com/nousresearch/hermes-go/security"
+
+	"golang.org/x/term"
 )
 
 const (
@@ -22,16 +23,19 @@ const (
 )
 
 type CLI struct {
-	agent   *core.Agent
-	cfg     *config.Config
-	scanner *bufio.Scanner
+	agent        *core.Agent
+	cfg          *config.Config
+	history      []string
+	historyIndex int
+	oldState     *term.State
 }
 
 func NewCLI(agent *core.Agent, cfg *config.Config) *CLI {
 	return &CLI{
-		agent:   agent,
-		cfg:     cfg,
-		scanner: bufio.NewScanner(os.Stdin),
+		agent:        agent,
+		cfg:          cfg,
+		history:      make([]string, 0),
+		historyIndex: -1,
 	}
 }
 
@@ -49,9 +53,23 @@ func (c *CLI) Run() error {
 		cancel()
 	}()
 
+	// Save and restore terminal state
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		var err error
+		c.oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			return fmt.Errorf("failed to set terminal to raw mode: %w", err)
+		}
+		defer term.Restore(int(os.Stdin.Fd()), c.oldState)
+	}
+
 	fmt.Println("Hermes Go - Secure AI Assistant")
 	fmt.Println("Type /quit or /exit to leave. Type /help for commands.")
+	fmt.Println("Use Up/Down arrows to navigate command history.")
 	fmt.Println()
+
+	currentInput := ""
+	cursorPos := 0
 
 	for {
 		select {
@@ -60,43 +78,167 @@ func (c *CLI) Run() error {
 		default:
 		}
 
-		fmt.Print(promptText)
-		if !c.scanner.Scan() {
+		// Print prompt and current input
+		fmt.Print("\r" + promptText + currentInput)
+		fmt.Print("\033[K") // Clear to end of line
+		if cursorPos < len(currentInput) {
+			// Move cursor back to correct position
+			fmt.Printf("\033[%dG", len(promptText)+cursorPos+1)
+		}
+
+		// Read single character
+		b := make([]byte, 1)
+		n, err := os.Stdin.Read(b)
+		if err != nil || n == 0 {
 			break
 		}
 
-		input := c.scanner.Text()
-		input = strings.TrimSpace(input)
+		ch := b[0]
 
-		if input == "" {
-			continue
-		}
+		// Handle escape sequences (arrow keys)
+		if ch == 27 { // ESC
+			// Read next characters for escape sequence
+			seq := make([]byte, 2)
+			os.Stdin.Read(seq)
 
-		if strings.HasPrefix(input, "/") {
-			if err := c.handleCommand(ctx, input); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			}
-			continue
-		}
-
-		if err := security.ValidateLength(input, security.MaxInputLength); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			continue
-		}
-
-		response, err := c.agent.Chat(ctx, input)
-		if err != nil {
-			if err == context.Canceled {
-				fmt.Println("\nCancelled.")
+			if seq[0] == 91 { // [
+				switch seq[1] {
+				case 65: // Up arrow
+					if len(c.history) > 0 {
+						if c.historyIndex == -1 {
+							c.historyIndex = len(c.history) - 1
+						} else if c.historyIndex > 0 {
+							c.historyIndex--
+						}
+						currentInput = c.history[c.historyIndex]
+						cursorPos = len(currentInput)
+					}
+				case 66: // Down arrow
+					if c.historyIndex != -1 {
+						if c.historyIndex < len(c.history)-1 {
+							c.historyIndex++
+							currentInput = c.history[c.historyIndex]
+						} else {
+							c.historyIndex = -1
+							currentInput = ""
+						}
+						cursorPos = len(currentInput)
+					}
+				case 67: // Right arrow
+					if cursorPos < len(currentInput) {
+						cursorPos++
+					}
+				case 68: // Left arrow
+					if cursorPos > 0 {
+						cursorPos--
+					}
+				case 51: // Delete (DEL)
+					if cursorPos < len(currentInput) {
+						currentInput = currentInput[:cursorPos] + currentInput[cursorPos+1:]
+					}
+				}
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			continue
 		}
 
-		fmt.Println()
-		fmt.Println(response)
-		fmt.Println()
+		// Handle special characters
+		switch ch {
+		case 13: // Enter
+			fmt.Println()
+			input := strings.TrimSpace(currentInput)
+
+			if input == "" {
+				currentInput = ""
+				cursorPos = 0
+				continue
+			}
+
+			// Add to history
+			if len(c.history) == 0 || c.history[len(c.history)-1] != input {
+				c.history = append(c.history, input)
+				// Limit history size
+				maxHistory := c.cfg.Terminal.ChatHistoryLen
+				if maxHistory <= 0 {
+					maxHistory = config.DefaultChatHistoryLen
+				}
+				if len(c.history) > maxHistory {
+					c.history = c.history[len(c.history)-maxHistory:]
+				}
+			}
+			c.historyIndex = -1
+
+			if strings.HasPrefix(input, "/") {
+				if err := c.handleCommand(ctx, input); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				}
+				currentInput = ""
+				cursorPos = 0
+				continue
+			}
+
+			if err := security.ValidateLength(input, security.MaxInputLength); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				currentInput = ""
+				cursorPos = 0
+				continue
+			}
+
+			response, err := c.agent.Chat(ctx, input)
+			if err != nil {
+				if err == context.Canceled {
+					fmt.Println("\nCancelled.")
+					currentInput = ""
+					cursorPos = 0
+					continue
+				}
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				currentInput = ""
+				cursorPos = 0
+				continue
+			}
+
+			fmt.Println()
+			fmt.Println(response)
+			fmt.Println()
+
+			currentInput = ""
+			cursorPos = 0
+
+		case 127, 8: // Backspace
+			if cursorPos > 0 {
+				currentInput = currentInput[:cursorPos-1] + currentInput[cursorPos:]
+				cursorPos--
+			}
+
+		case 3: // Ctrl+C
+			fmt.Println("^C")
+			c.agent.Interrupt()
+			currentInput = ""
+			cursorPos = 0
+
+		case 21: // Ctrl+U - Clear line
+			currentInput = ""
+			cursorPos = 0
+
+		case 23: // Ctrl+W - Delete word
+			// Find start of current word
+			i := cursorPos - 1
+			for i >= 0 && currentInput[i] == ' ' {
+				i--
+			}
+			for i >= 0 && currentInput[i] != ' ' {
+				i--
+			}
+			currentInput = currentInput[:i+1] + currentInput[cursorPos:]
+			cursorPos = i + 1
+
+		default:
+			// Printable character
+			if ch >= 32 && ch < 127 {
+				currentInput = currentInput[:cursorPos] + string(ch) + currentInput[cursorPos:]
+				cursorPos++
+			}
+		}
 	}
 
 	return nil
@@ -123,6 +265,13 @@ func (c *CLI) handleCommand(ctx context.Context, input string) error {
 		fmt.Println("  /config       - Open configuration editor")
 		fmt.Println("  /test         - Quick test the LLM connection")
 		fmt.Println("  /clear        - Clear the screen")
+		fmt.Println()
+		fmt.Println("Keyboard shortcuts:")
+		fmt.Println("  Up/Down       - Navigate command history")
+		fmt.Println("  Left/Right    - Move cursor")
+		fmt.Println("  Ctrl+U        - Clear line")
+		fmt.Println("  Ctrl+W        - Delete word")
+		fmt.Println("  Ctrl+C        - Interrupt current operation")
 		return nil
 	case "/session":
 		fmt.Printf("Session ID: %s\n", c.agent.GetSessionID())

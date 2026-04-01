@@ -37,8 +37,8 @@ func (t *ConfigTUI) Run() error {
 		}
 
 		choice, err := strconv.Atoi(input)
-		if err != nil || choice < 0 || choice > 13 {
-			fmt.Println("Invalid choice. Enter a number 0-13.")
+		if err != nil || choice < 0 || choice > 14 {
+			fmt.Println("Invalid choice. Enter a number 0-14.")
 			continue
 		}
 
@@ -68,13 +68,14 @@ func (t *ConfigTUI) printMenu() {
 	fmt.Printf("║  8. Bearer Token   │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.BearerToken))
 	fmt.Printf("║  9. Ollama URL     │ %-29s ║\n", t.cfg.Ollama.BaseURL)
 	fmt.Printf("║ 10. Ollama Model   │ %-29s ║\n", t.cfg.Ollama.Model)
-	fmt.Printf("║ 11. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
-	fmt.Printf("║ 12. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
-	fmt.Printf("║ 13. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
+	fmt.Printf("║ 11. Chat History   │ %-29d ║\n", t.cfg.Terminal.ChatHistoryLen)
+	fmt.Printf("║ 12. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
+	fmt.Printf("║ 13. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
+	fmt.Printf("║ 14. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
 	fmt.Println("╠══════════════════════════════════════════╣")
 	fmt.Println("║  0. Save & Exit                          ║")
 	fmt.Println("╚══════════════════════════════════════════╝")
-	fmt.Print("\nSelect option (0-13): ")
+	fmt.Print("\nSelect option (0-14): ")
 }
 
 func (t *ConfigTUI) maskedKey(key string) string {
@@ -197,6 +198,18 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 		}
 
 	case 11:
+		fmt.Print("Chat history length (10-1000, default 200): ")
+		if !t.scanner.Scan() {
+			return false, nil
+		}
+		val := strings.TrimSpace(t.scanner.Text())
+		if n, err := strconv.Atoi(val); err == nil && n >= 10 && n <= 1000 {
+			t.cfg.SetChatHistoryLen(n)
+		} else if val != "" {
+			fmt.Println("Invalid value. Must be 10-1000.")
+		}
+
+	case 12:
 		fmt.Print("API server host (current: " + t.cfg.APIServer.Host + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -206,7 +219,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			t.cfg.SetAPIHost(val)
 		}
 
-	case 12:
+	case 13:
 		fmt.Print("API server port (current: " + strconv.Itoa(t.cfg.APIServer.Port) + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -218,7 +231,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			fmt.Println("Invalid port. Must be 1-65535.")
 		}
 
-	case 13:
+	case 14:
 		fmt.Printf("Require API key for API server? (current: %t) [y/n]: ", t.cfg.APIServer.Key != "")
 		if !t.scanner.Scan() {
 			return false, nil

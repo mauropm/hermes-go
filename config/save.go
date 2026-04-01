@@ -143,3 +143,9 @@ func (cfg *Config) SetOllamaTimeout(timeout time.Duration) {
 	defer cfg.mu.Unlock()
 	cfg.Ollama.Timeout = timeout
 }
+
+func (cfg *Config) SetChatHistoryLen(n int) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.Terminal.ChatHistoryLen = n
+}
