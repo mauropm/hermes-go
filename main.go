@@ -26,19 +26,20 @@ const version = "0.6.0"
 
 func main() {
 	var (
-		profile      string
-		cmd          string
-		showVer      bool
-		thinking     bool
-		provider     string
-		ollamaURL    string
-		ollamaModel  string
+		profile       string
+		cmd           string
+		showVer       bool
+		thinking      bool
+		provider      string
+		ollamaURL     string
+		ollamaModel   string
 		ollamaTimeout int
 	)
 
+	// Parse flags - this handles flags before positional args
 	flag.StringVar(&profile, "p", "", "Profile name")
 	flag.StringVar(&profile, "profile", "", "Profile name")
-	flag.StringVar(&cmd, "cmd", "", "Command to run (chat, api)")
+	flag.StringVar(&cmd, "cmd", "", "Command to run (chat, api, setup)")
 	flag.BoolVar(&showVer, "version", false, "Show version")
 	flag.BoolVar(&showVer, "v", false, "Show version")
 	flag.BoolVar(&thinking, "thinking", false, "Show model thinking/reasoning output")
@@ -53,13 +54,32 @@ func main() {
 		os.Exit(0)
 	}
 
-	if cmd == "" {
-		args := flag.Args()
-		if len(args) > 0 {
-			cmd = args[0]
-		} else {
-			cmd = "chat"
+	// Handle positional arguments (subcommand pattern)
+	// This allows: hermes-go chat --provider ollama --ollama-model llama3
+	args := flag.Args()
+	if cmd == "" && len(args) > 0 {
+		// First positional arg might be the command
+		potentialCmd := args[0]
+		if potentialCmd == "chat" || potentialCmd == "api" || potentialCmd == "setup" || potentialCmd == "version" {
+			cmd = potentialCmd
+			// Parse remaining args for flags
+			if len(args) > 1 {
+				// Create new flag set for remaining args
+				fs := flag.NewFlagSet("subcommand", flag.ContinueOnError)
+				fs.StringVar(&profile, "p", "", "Profile name")
+				fs.StringVar(&profile, "profile", "", "Profile name")
+				fs.BoolVar(&thinking, "thinking", false, "Show model thinking/reasoning output")
+				fs.StringVar(&provider, "provider", "", "LLM provider")
+				fs.StringVar(&ollamaURL, "ollama-url", "", "Ollama base URL")
+				fs.StringVar(&ollamaModel, "ollama-model", "", "Ollama model name")
+				fs.IntVar(&ollamaTimeout, "ollama-timeout", 120, "Ollama request timeout")
+				_ = fs.Parse(args[1:])
+			}
 		}
+	}
+
+	if cmd == "" {
+		cmd = "chat"
 	}
 
 	cfg, err := config.Load(profile)
@@ -101,6 +121,9 @@ func runChat(cfg *config.Config, showThinking bool, providerFlag, ollamaURL, oll
 		if ollamaModel != "" {
 			cfg.Ollama.Model = ollamaModel
 			cfg.Model = "ollama/" + ollamaModel
+		} else if cfg.Ollama.Model != "" {
+			// Use configured Ollama model if not specified via CLI
+			cfg.Model = "ollama/" + cfg.Ollama.Model
 		}
 		cfg.Ollama.Timeout = time.Duration(ollamaTimeout) * time.Second
 	} else if providerFlag != "" {
@@ -128,10 +151,9 @@ func runChat(cfg *config.Config, showThinking bool, providerFlag, ollamaURL, oll
 		}
 	}
 
+	// Use the provider from config (already set from CLI flags above)
+	// Only auto-detect if explicitly set to "auto"
 	provider := cfg.Provider
-	if provider == "auto" {
-		provider = llm.DetectProvider(cfg.Model)
-	}
 
 	var apiKey string
 	if provider != "bedrock" && provider != "ollama" {
