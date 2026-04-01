@@ -53,6 +53,12 @@ func (c *CLI) Run() error {
 		cancel()
 	}()
 
+	// Print welcome message BEFORE entering raw mode
+	fmt.Println("Hermes Go - Secure AI Assistant")
+	fmt.Println("Type /quit or /exit to leave. Type /help for commands.")
+	fmt.Println("Use Up/Down arrows to navigate command history.")
+	fmt.Println()
+
 	// Save and restore terminal state
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		var err error
@@ -62,11 +68,6 @@ func (c *CLI) Run() error {
 		}
 		defer term.Restore(int(os.Stdin.Fd()), c.oldState)
 	}
-
-	fmt.Println("Hermes Go - Secure AI Assistant")
-	fmt.Println("Type /quit or /exit to leave. Type /help for commands.")
-	fmt.Println("Use Up/Down arrows to navigate command history.")
-	fmt.Println()
 
 	currentInput := ""
 	cursorPos := 0
@@ -86,9 +87,21 @@ func (c *CLI) Run() error {
 			fmt.Printf("\033[%dG", len(promptText)+cursorPos+1)
 		}
 
-		// Read single character
+		// Read single character (handle EINTR)
 		b := make([]byte, 1)
-		n, err := os.Stdin.Read(b)
+		var n int
+		var err error
+		for {
+			n, err = os.Stdin.Read(b)
+			if err == nil || n > 0 {
+				break
+			}
+			// On EINTR (interrupted system call), retry
+			if err == syscall.EINTR {
+				continue
+			}
+			break
+		}
 		if err != nil || n == 0 {
 			break
 		}
