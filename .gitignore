@@ -1,0 +1,12 @@
+# .gitignore
+hermes-go
+*.db
+*.db-wal
+*.db-shm
+.env
+config.yaml
+sessions.db
+memory/
+logs/
+internal/scheduler/jobs.json
+internal/learning/failures.json
