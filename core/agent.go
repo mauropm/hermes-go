@@ -54,6 +54,7 @@ type AgentConfig struct {
 	OllamaBaseURL      string
 	OllamaModel        string
 	OllamaTimeout      time.Duration
+	OllamaThink        string
 	ToolRegistry       *tools.Registry
 	SessionDB          *storage.SessionDB
 	MemStore           *memory.Store
@@ -80,6 +81,7 @@ func NewAgent(cfg AgentConfig) (*Agent, error) {
 		BedrockSecretKey:   cfg.BedrockSecretKey,
 		OllamaBaseURL:      cfg.OllamaBaseURL,
 		OllamaModel:        cfg.OllamaModel,
+		OllamaThink:        cfg.OllamaThink,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create provider: %w", err)

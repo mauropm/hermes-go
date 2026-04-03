@@ -54,9 +54,9 @@ type AgentConfig struct {
 }
 
 type TerminalConfig struct {
-	Backend       string        `yaml:"backend"`
-	Timeout       time.Duration `yaml:"timeout"`
-	ChatHistoryLen int          `yaml:"chat_history_len"`
+	Backend        string        `yaml:"backend"`
+	Timeout        time.Duration `yaml:"timeout"`
+	ChatHistoryLen int           `yaml:"chat_history_len"`
 }
 
 type MemoryConfig struct {
@@ -93,6 +93,7 @@ type OllamaConfig struct {
 	BaseURL string        `yaml:"base_url"`
 	Model   string        `yaml:"model"`
 	Timeout time.Duration `yaml:"timeout"`
+	Think   string        `yaml:"think"`
 }
 
 var (

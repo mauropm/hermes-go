@@ -37,8 +37,8 @@ func (t *ConfigTUI) Run() error {
 		}
 
 		choice, err := strconv.Atoi(input)
-		if err != nil || choice < 0 || choice > 14 {
-			fmt.Println("Invalid choice. Enter a number 0-14.")
+		if err != nil || choice < 0 || choice > 15 {
+			fmt.Println("Invalid choice. Enter a number 0-15.")
 			continue
 		}
 
@@ -68,14 +68,15 @@ func (t *ConfigTUI) printMenu() {
 	fmt.Printf("║  8. Bearer Token   │ %-29s ║\n", t.maskedKey(t.cfg.Bedrock.BearerToken))
 	fmt.Printf("║  9. Ollama URL     │ %-29s ║\n", t.cfg.Ollama.BaseURL)
 	fmt.Printf("║ 10. Ollama Model   │ %-29s ║\n", t.cfg.Ollama.Model)
-	fmt.Printf("║ 11. Chat History   │ %-29d ║\n", t.cfg.Terminal.ChatHistoryLen)
-	fmt.Printf("║ 12. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
-	fmt.Printf("║ 13. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
-	fmt.Printf("║ 14. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
+	fmt.Printf("║ 11. Ollama Think   │ %-29s ║\n", t.ollamaThinkLabel())
+	fmt.Printf("║ 12. Chat History   │ %-29d ║\n", t.cfg.Terminal.ChatHistoryLen)
+	fmt.Printf("║ 13. API Host       │ %-29s ║\n", t.cfg.APIServer.Host)
+	fmt.Printf("║ 14. API Port       │ %-29d ║\n", t.cfg.APIServer.Port)
+	fmt.Printf("║ 15. API Key Req'd  │ %-29t ║\n", t.cfg.APIServer.Key != "")
 	fmt.Println("╠══════════════════════════════════════════╣")
 	fmt.Println("║  0. Save & Exit                          ║")
 	fmt.Println("╚══════════════════════════════════════════╝")
-	fmt.Print("\nSelect option (0-14): ")
+	fmt.Print("\nSelect option (0-15): ")
 }
 
 func (t *ConfigTUI) maskedKey(key string) string {
@@ -94,6 +95,14 @@ func (t *ConfigTUI) shortModel() string {
 		return m[:26] + "..."
 	}
 	return m
+}
+
+func (t *ConfigTUI) ollamaThinkLabel() string {
+	think := t.cfg.Ollama.Think
+	if think == "" {
+		return "false"
+	}
+	return think
 }
 
 func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
@@ -198,6 +207,9 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 		}
 
 	case 11:
+		t.configureOllamaThink()
+
+	case 12:
 		fmt.Print("Chat history length (10-1000, default 200): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -209,7 +221,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			fmt.Println("Invalid value. Must be 10-1000.")
 		}
 
-	case 12:
+	case 13:
 		fmt.Print("API server host (current: " + t.cfg.APIServer.Host + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -219,7 +231,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			t.cfg.SetAPIHost(val)
 		}
 
-	case 13:
+	case 14:
 		fmt.Print("API server port (current: " + strconv.Itoa(t.cfg.APIServer.Port) + "): ")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -231,7 +243,7 @@ func (t *ConfigTUI) handleChoice(choice int) (bool, error) {
 			fmt.Println("Invalid port. Must be 1-65535.")
 		}
 
-	case 14:
+	case 15:
 		fmt.Printf("Require API key for API server? (current: %t) [y/n]: ", t.cfg.APIServer.Key != "")
 		if !t.scanner.Scan() {
 			return false, nil
@@ -387,6 +399,9 @@ func (t *ConfigTUI) selectOllamaModel() {
 	if val == "y" || val == "yes" {
 		t.testOllamaConnection()
 	}
+
+	// Prompt for thinking level
+	t.configureOllamaThink()
 }
 
 // configureOllama allows quick configuration of Ollama URL and model.
@@ -430,6 +445,46 @@ func (t *ConfigTUI) configureOllama() {
 	if val == "y" || val == "yes" {
 		t.testOllamaConnection()
 	}
+}
+
+// configureOllamaThink allows the user to set the thinking level for Ollama.
+func (t *ConfigTUI) configureOllamaThink() {
+	fmt.Println()
+	fmt.Println("Ollama Thinking Level")
+	fmt.Println(strings.Repeat("-", 50))
+	fmt.Printf("Current level: %s\n", t.ollamaThinkLabel())
+	fmt.Println()
+	fmt.Println("Thinking levels control how much reasoning the model performs:")
+	fmt.Println("  1. false  - No thinking tokens (fastest)")
+	fmt.Println("  2. low    - Brief reasoning")
+	fmt.Println("  3. medium - Moderate reasoning")
+	fmt.Println("  4. high   - Deep reasoning (slowest, most tokens)")
+	fmt.Println()
+	fmt.Print("Select level (1-4, or 0 to keep current): ")
+	if !t.scanner.Scan() {
+		return
+	}
+	val := strings.TrimSpace(t.scanner.Text())
+
+	var think string
+	switch val {
+	case "1":
+		think = "false"
+	case "2":
+		think = "low"
+	case "3":
+		think = "medium"
+	case "4":
+		think = "high"
+	case "0", "":
+		return
+	default:
+		fmt.Println("Invalid choice.")
+		return
+	}
+
+	t.cfg.SetOllamaThink(think)
+	fmt.Printf("Thinking level set to: %s\n", think)
 }
 
 // testOllamaConnection attempts to ping the Ollama instance.

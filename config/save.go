@@ -144,6 +144,12 @@ func (cfg *Config) SetOllamaTimeout(timeout time.Duration) {
 	cfg.Ollama.Timeout = timeout
 }
 
+func (cfg *Config) SetOllamaThink(think string) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	cfg.Ollama.Think = think
+}
+
 func (cfg *Config) SetChatHistoryLen(n int) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()

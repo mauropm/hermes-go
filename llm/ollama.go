@@ -22,6 +22,7 @@ type OllamaConfig struct {
 	BaseURL string
 	Model   string
 	Timeout time.Duration
+	Think   string // "off", "light", "medium", "hard"
 }
 
 // OllamaProvider implements the Provider interface for Ollama.
@@ -30,6 +31,7 @@ type OllamaProvider struct {
 	baseURL string
 	model   string
 	timeout time.Duration
+	think   string
 }
 
 // NewOllamaProvider creates a new Ollama provider.
@@ -61,15 +63,16 @@ func NewOllamaProvider(cfg OllamaConfig) (*OllamaProvider, error) {
 		baseURL: baseURL,
 		model:   cfg.Model,
 		timeout: timeout,
+		think:   cfg.Think,
 	}, nil
 }
 
 // ollamaGenerateRequest is the request body for /api/generate.
 type ollamaGenerateRequest struct {
-	Model     string  `json:"model"`
-	Prompt    string  `json:"prompt"`
-	Stream    bool    `json:"stream"`
-	Options   ollamaOptions `json:"options,omitempty"`
+	Model   string        `json:"model"`
+	Prompt  string        `json:"prompt"`
+	Stream  bool          `json:"stream"`
+	Options ollamaOptions `json:"options,omitempty"`
 }
 
 // ollamaOptions holds generation options for Ollama.
@@ -77,6 +80,7 @@ type ollamaOptions struct {
 	Temperature float64 `json:"temperature,omitempty"`
 	TopP        float64 `json:"top_p,omitempty"`
 	NumPredict  int     `json:"num_predict,omitempty"`
+	Think       string  `json:"think,omitempty"`
 }
 
 // ollamaGenerateResponse is the response body for /api/generate.
@@ -95,11 +99,11 @@ type ollamaTagsResponse struct {
 
 // ollamaTagModel represents a model in the /api/tags response.
 type ollamaTagModel struct {
-	Name       string            `json:"name"`
-	Model      string            `json:"model"`
-	ModifiedAt time.Time         `json:"modified_at"`
-	Size       int64             `json:"size"`
-	Digest     string            `json:"digest"`
+	Name       string             `json:"name"`
+	Model      string             `json:"model"`
+	ModifiedAt time.Time          `json:"modified_at"`
+	Size       int64              `json:"size"`
+	Digest     string             `json:"digest"`
 	Details    ollamaModelDetails `json:"details"`
 }
 
@@ -165,6 +169,7 @@ func (p *OllamaProvider) Chat(ctx context.Context, messages []Message, tools []T
 			Temperature: 0.7,
 			TopP:        0.9,
 			NumPredict:  4096,
+			Think:       p.think,
 		},
 	}
 

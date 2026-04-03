@@ -65,6 +65,7 @@ type ProviderConfig struct {
 	// Ollama-specific fields
 	OllamaBaseURL string
 	OllamaModel   string
+	OllamaThink   string
 }
 
 func NewProvider(cfg ProviderConfig) (Provider, error) {
@@ -84,6 +85,7 @@ func NewProvider(cfg ProviderConfig) (Provider, error) {
 			BaseURL: cfg.OllamaBaseURL,
 			Model:   cfg.OllamaModel,
 			Timeout: cfg.Timeout,
+			Think:   cfg.OllamaThink,
 		})
 	default:
 		return NewOpenAICompatibleProvider(cfg)
