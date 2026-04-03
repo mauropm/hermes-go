@@ -92,8 +92,8 @@ type BedrockConfig struct {
 type OllamaConfig struct {
 	BaseURL string        `yaml:"base_url"`
 	Model   string        `yaml:"model"`
-	Timeout time.Duration `yaml:"timeout"`
 	Think   string        `yaml:"think"`
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 var (
