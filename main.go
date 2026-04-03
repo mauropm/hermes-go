@@ -154,6 +154,9 @@ func runChat(cfg *config.Config, showThinking bool, providerFlag, ollamaURL, oll
 	// Use the provider from config (already set from CLI flags above)
 	// Only auto-detect if explicitly set to "auto"
 	provider := cfg.Provider
+	if provider == "auto" {
+		provider = llm.DetectProvider(cfg.Model)
+	}
 
 	var apiKey string
 	if provider != "bedrock" && provider != "ollama" {
