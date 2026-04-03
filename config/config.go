@@ -174,7 +174,7 @@ func defaultConfig(homeDir string) *Config {
 		Ollama: OllamaConfig{
 			BaseURL: "http://localhost:11434",
 			Model:   "llama3",
-			Timeout: 120 * time.Second,
+			Timeout: 300 * time.Second,
 		},
 		APIKeys: make(map[string]string),
 	}

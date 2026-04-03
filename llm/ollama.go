@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultOllamaBaseURL = "http://localhost:11434"
-	ollamaTimeout        = 120 * time.Second
+	ollamaTimeout        = 300 * time.Second // 5 minutes for large models
 )
 
 // OllamaConfig holds configuration for the Ollama provider.

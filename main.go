@@ -46,7 +46,7 @@ func main() {
 	flag.StringVar(&provider, "provider", "", "LLM provider (openai, anthropic, bedrock, ollama)")
 	flag.StringVar(&ollamaURL, "ollama-url", "", "Ollama base URL (e.g., http://localhost:11434)")
 	flag.StringVar(&ollamaModel, "ollama-model", "", "Ollama model name (e.g., llama3, mistral)")
-	flag.IntVar(&ollamaTimeout, "ollama-timeout", 120, "Ollama request timeout in seconds")
+	flag.IntVar(&ollamaTimeout, "ollama-timeout", 300, "Ollama request timeout in seconds")
 	flag.Parse()
 
 	if showVer {

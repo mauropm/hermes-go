@@ -23,7 +23,7 @@ func TestOllamaProviderCreation(t *testing.T) {
 			name:        "default config",
 			config:      OllamaConfig{},
 			wantBaseURL: "http://localhost:11434",
-			wantTimeout: 120 * time.Second,
+			wantTimeout: 300 * time.Second,
 			wantErr:     false,
 		},
 		{
@@ -32,7 +32,7 @@ func TestOllamaProviderCreation(t *testing.T) {
 				BaseURL: "http://remote:11434",
 			},
 			wantBaseURL: "http://remote:11434",
-			wantTimeout: 120 * time.Second,
+			wantTimeout: 300 * time.Second,
 			wantErr:     false,
 		},
 		{
@@ -51,7 +51,7 @@ func TestOllamaProviderCreation(t *testing.T) {
 				BaseURL: "http://localhost:11434/",
 			},
 			wantBaseURL: "http://localhost:11434",
-			wantTimeout: 120 * time.Second,
+			wantTimeout: 300 * time.Second,
 			wantErr:     false,
 		},
 	}
